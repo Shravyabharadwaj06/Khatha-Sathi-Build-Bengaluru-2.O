@@ -1,0 +1,2 @@
+/* VERBATIM copy of the <style> block in design-reference/log_in.html + sign_up.html (identical). DO NOT EDIT. Injected only while its route is mounted. */
+@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}

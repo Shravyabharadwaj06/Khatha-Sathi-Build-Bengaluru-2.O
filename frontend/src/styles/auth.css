@@ -1,0 +1,5 @@
+/* Tailwind input for the Log in + Sign up routes (replaces cdn.tailwindcss.com).
+   Imported with ?inline and injected only while an auth route is mounted. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
