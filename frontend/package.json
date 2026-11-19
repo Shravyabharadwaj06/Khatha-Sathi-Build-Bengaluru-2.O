@@ -1,0 +1,42 @@
+{
+  "name": "khatha-sathi-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "visual:compare": "npm run build && tsx scripts/visual-compare.ts",
+    "visual:interactions": "npm run build && tsx scripts/interaction-check.ts",
+    "test:visual": "npm run build && tsx scripts/visual-compare.ts && tsx scripts/interaction-check.ts"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.28.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.15.0",
+    "@playwright/test": "1.49.1",
+    "@types/node": "22.10.1",
+    "@types/pixelmatch": "5.2.6",
+    "@types/pngjs": "6.0.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "eslint": "9.15.0",
+    "eslint-plugin-react-hooks": "5.0.0",
+    "eslint-plugin-react-refresh": "0.4.14",
+    "globals": "15.12.0",
+    "pixelmatch": "6.0.0",
+    "pngjs": "7.0.0",
+    "postcss": "8.4.49",
+    "tailwindcss": "3.4.17",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3",
+    "typescript-eslint": "8.16.0",
+    "vite": "5.4.11"
+  }
+}
