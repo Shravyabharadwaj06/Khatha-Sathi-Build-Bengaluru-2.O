@@ -7,7 +7,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional
 
@@ -2213,6 +2213,112 @@ def get_dashboard(
         "total_outstanding": _rupees(sum(int(row["balance_paise"]) for row in customers)),
         "low_stock_count": len(low_stock),
         "low_stock_products": low_stock,
+    }
+
+
+IST = timezone(timedelta(hours=5, minutes=30))  # India has no daylight saving time
+QUICK_UPDATE_PERIODS = {"today", "yesterday", "week", "month", "custom"}
+
+
+def _quick_update_range(period: str, start: Optional[str], end: Optional[str], now: datetime) -> tuple[datetime, datetime]:
+    """[start, end) in IST for the Quick Update screen. `custom` needs start/end dates (end inclusive)."""
+    today = now.astimezone(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "today":
+        return today, now
+    if period == "yesterday":
+        return today - timedelta(days=1), today
+    if period == "week":
+        return today - timedelta(days=6), now  # the last 7 days, today included
+    if period == "month":
+        return today.replace(day=1), now
+    first, last = parse_date(start), parse_date(end)
+    if first is None or last is None:
+        raise HTTPException(status_code=422, detail="period=custom needs start and end dates (YYYY-MM-DD).")
+    if first > last:
+        raise HTTPException(status_code=422, detail="start must be on or before end.")
+    if (last - first).days > 366:
+        raise HTTPException(status_code=422, detail="A custom period can be at most one year.")
+    begin = datetime(first.year, first.month, first.day, tzinfo=IST)
+    finish = datetime(last.year, last.month, last.day, tzinfo=IST) + timedelta(days=1)
+    return begin, min(finish, now)
+
+
+@app.get("/quick-update")
+def get_quick_update(
+    period: str = "week",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    """Read-only metrics for the Quick Update screen (first version by Rashmitha, rashmitha-final).
+
+    Days are Indian days (IST). Entries that were undone are left out, whenever the undo happened.
+    The database does not record whether the paid part of a part-paid sale was cash or UPI, so that
+    amount is reported on its own (`part_paid`) instead of being guessed into cash or UPI.
+    """
+    period = period.strip().lower()
+    if period not in QUICK_UPDATE_PERIODS:
+        raise HTTPException(status_code=422, detail="period must be today, yesterday, week, month, or custom.")
+    start_at, end_at = _quick_update_range(period, start, end, datetime.now(timezone.utc))
+
+    rows = _all(
+        db,
+        """
+        select e.id, e.customer_id, e.type, e.amount_paise, e.paid_paise,
+               e.due_delta_paise, e.payment_mode, e.created_at
+          from public.ledger_entries e
+         where e.shop_id = :shop_id
+           and e.created_at >= :start_at
+           and e.created_at < :end_at
+           and e.type in ('sale', 'payment')
+           and not exists (
+                 select 1 from public.ledger_entries r
+                  where r.shop_id = e.shop_id and r.type = 'reversal' and r.ref_entry_id = e.id
+               )
+         order by e.created_at desc, e.id desc
+        """,
+        {"shop_id": context.shop_id, "start_at": start_at, "end_at": end_at},
+    )
+    sales = [row for row in rows if row["type"] == "sale"]
+    payments = [row for row in rows if row["type"] == "payment"]
+
+    def paid(entries, mode: str) -> int:
+        return sum(int(row["paid_paise"] or 0) for row in entries if row["payment_mode"] == mode)
+
+    udhaar_sales = [row for row in sales if int(row["due_delta_paise"] or 0) > 0]
+    balances = _all(
+        db,
+        "select balance_paise from public.customer_balances where shop_id = :shop_id",
+        {"shop_id": context.shop_id},
+    )
+    return {
+        "period": period,
+        "start": _iso(start_at),
+        "end": _iso(end_at),
+        "total_sales": _rupees(sum(int(row["amount_paise"] or 0) for row in sales)),
+        "bill_count": len(sales),
+        # Money that came in: fully paid bills plus payments received, by method.
+        "cash_box": _rupees(paid(sales, "cash") + paid(payments, "cash")),
+        "upi_received": _rupees(paid(sales, "upi") + paid(payments, "upi")),
+        "part_paid": _rupees(paid(sales, "partial")),
+        "udhaar_given": _rupees(sum(int(row["due_delta_paise"]) for row in udhaar_sales)),
+        "udhaar_customer_count": len({str(row["customer_id"]) for row in udhaar_sales if row["customer_id"]}),
+        "collected_this_period": _rupees(sum(int(row["amount_paise"] or 0) for row in payments)),
+        "total_outstanding": _rupees(sum(max(int(row["balance_paise"] or 0), 0) for row in balances)),
+        "recent_transactions": [
+            {
+                "id": str(row["id"]),
+                "customer_id": str(row["customer_id"]) if row["customer_id"] else None,
+                "type": row["type"],
+                "amount": _rupees(row["amount_paise"]),
+                "paid_amount": _rupees(row["paid_paise"]),
+                "payment_method": "credit" if row["payment_mode"] == "udhaar" else row["payment_mode"],
+                "transaction_date": _iso(row["created_at"]),
+                "status": "paid" if int(row["paid_paise"] or 0) >= int(row["amount_paise"] or 0) else "partial",
+            }
+            for row in rows[:10]
+        ],
     }
 
 

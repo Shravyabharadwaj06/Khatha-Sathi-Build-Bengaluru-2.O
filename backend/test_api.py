@@ -191,3 +191,71 @@ def test_dashboard_counts_active_customers_and_nets_reversals(monkeypatch):
     assert result["total_customers"] == 1
     assert result["total_sales"] == 30
     assert result["total_outstanding"] == 20
+
+
+# --------------------------------------------------------------------------- /quick-update (first version: Rashmitha)
+def _quick_update(monkeypatch, entries, balances=(34200,), **params):
+    def fake_all(*args):
+        query = args[1]
+        if "ledger_entries" in query:
+            assert "not exists" in query and "reversal" in query  # undone entries are filtered in SQL
+            return entries
+        if "customer_balances" in query:
+            return [{"balance_paise": b} for b in balances]
+        return []
+
+    monkeypatch.setattr(main, "_all", fake_all)
+    return main.get_quick_update(context=main.AuthContext("user", "shop", "user@example.com"), db=None, **params)
+
+
+def test_quick_update_metrics_split_cash_upi_part_paid_and_udhaar(monkeypatch):
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    row = lambda i, t, amount, paid, due, mode, cust=None: {  # noqa: E731
+        "id": f"00000000-0000-0000-0000-00000000000{i}", "customer_id": cust, "type": t, "amount_paise": amount,
+        "paid_paise": paid, "due_delta_paise": due, "payment_mode": mode, "created_at": now,
+    }
+    cust = "00000000-0000-0000-0000-000000000010"
+    entries = [
+        row(1, "sale", 10000, 10000, 0, "cash"),            # walk-in, cash
+        row(2, "sale", 5000, 5000, 0, "upi"),               # walk-in, UPI
+        row(3, "sale", 18450, 7850, 10600, "partial", cust),  # part paid, rest on udhaar
+        row(4, "sale", 3000, 0, 3000, "udhaar", cust),       # full udhaar
+        row(5, "payment", 1900, 1900, -1900, "upi", cust),   # payment received
+    ]
+    result = _quick_update(monkeypatch, entries, period="week")
+    assert result["total_sales"] == 364.5 and result["bill_count"] == 4
+    assert result["cash_box"] == 100
+    assert result["upi_received"] == 69  # 50 UPI sale + 19 UPI payment
+    assert result["part_paid"] == 78.5   # method of the paid part is not recorded
+    assert result["udhaar_given"] == 136 and result["udhaar_customer_count"] == 1
+    assert result["collected_this_period"] == 19
+    assert result["total_outstanding"] == 342
+    assert [r["payment_method"] for r in result["recent_transactions"]] == ["cash", "upi", "partial", "credit", "upi"]
+
+
+def test_quick_update_days_are_indian_days():
+    from datetime import datetime, timezone
+
+    # 22 Nov 2026, 02:00 IST = 21 Nov 20:30 UTC. "today" must start at 22 Nov 00:00 IST, not 21 Nov 00:00 UTC.
+    now = datetime(2026, 11, 21, 20, 30, tzinfo=timezone.utc)
+    start, end = main._quick_update_range("today", None, None, now)
+    assert start.isoformat() == "2026-11-22T00:00:00+05:30" and end == now
+    start, end = main._quick_update_range("yesterday", None, None, now)
+    assert (start.isoformat(), end.isoformat()) == ("2026-11-21T00:00:00+05:30", "2026-11-22T00:00:00+05:30")
+    start, _ = main._quick_update_range("month", None, None, now)
+    assert start.isoformat() == "2026-11-01T00:00:00+05:30"
+    start, end = main._quick_update_range("custom", "2026-11-01", "2026-11-10", now)
+    assert (start.isoformat(), end.isoformat()) == ("2026-11-01T00:00:00+05:30", "2026-11-11T00:00:00+05:30")
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"period": "quarter"}, {"period": "custom"}, {"period": "custom", "start": "2026-11-10", "end": "2026-11-01"},
+     {"period": "custom", "start": "2025-01-01", "end": "2026-11-01"}, {"period": "custom", "start": "x", "end": "y"}],
+)
+def test_quick_update_rejects_bad_periods(params):
+    with pytest.raises(HTTPException) as error:
+        main.get_quick_update(context=main.AuthContext("user", "shop", "user@example.com"), db=None, **params)
+    assert error.value.status_code == 422
