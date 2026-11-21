@@ -81,11 +81,11 @@ export default function Products() {
   };
 
   return (
-    <main style={{ maxWidth: 1050, margin: '35px auto', padding: 24, color: '#17243b' }}>
-      <button onClick={() => history.back()} style={{ padding: '10px 16px', cursor: 'pointer' }}>← Back</button>
-      <h1>Product Update</h1>
-      <p>Add new products or update existing stock and prices.</p>
-      <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 14, background: '#fff', padding: 22, borderRadius: 16 }}>
+    <main style={{ color: '#17243b' }}>
+      <button onClick={() => history.back()} style={{ padding: '0 16px', minHeight: 48, borderRadius: 4, cursor: 'pointer' }}>← Back</button>
+      <h1 style={{ margin: '24px 0 8px' }}>Product Update</h1>
+      <p style={{ margin: '0 0 24px' }}>Add new products or update existing stock and prices.</p>
+      <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 16, alignItems: 'end', background: '#fff', padding: 24, borderRadius: 8 }}>
         {[
           ['name', 'Product name', 'text'],
           ['category', 'Category', 'text'],
@@ -96,25 +96,25 @@ export default function Products() {
           ['expiry_date', 'Expiry date', 'date'],
           ['low_stock_threshold', 'Low stock alert level', 'number']
         ].map(([name, label, type]) => (
-          <label key={name} style={{ display: 'grid', gap: 6, fontWeight: 600 }}>
+          <label key={name} style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
             {label}
-            <input name={name} type={type} value={form[name]} onChange={change} required={['name', 'selling_price', 'stock_quantity'].includes(name)} min={type === 'number' ? 0 : undefined} style={{ padding: 12, border: '1px solid #ccd3df', borderRadius: 8 }} />
+            <input name={name} type={type} value={form[name]} onChange={change} required={['name', 'selling_price', 'stock_quantity'].includes(name)} min={type === 'number' ? 0 : undefined} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
           </label>
         ))}
-        <button type="submit" style={{ padding: 13, background: '#f5c842', border: 0, borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>{editing === null ? 'Add Product' : 'Save Changes'}</button>
-        {editing !== null && <button type="button" onClick={() => { setEditing(null); setForm({ name: '', category: '', selling_price: '', purchase_price: '', stock_quantity: '', unit: 'pcs', expiry_date: '', low_stock_threshold: 5 }); }}>Cancel Edit</button>}
+        <button type="submit" style={{ padding: '0 16px', minHeight: 48, borderRadius: 4, background: '#f5c842', border: 0, fontWeight: 700, cursor: 'pointer' }}>{editing === null ? 'Add Product' : 'Save Changes'}</button>
+        {editing !== null && <button type="button" onClick={() => { setEditing(null); setForm({ name: '', category: '', selling_price: '', purchase_price: '', stock_quantity: '', unit: 'pcs', expiry_date: '', low_stock_threshold: 5 }); }} style={{ minHeight: 48, borderRadius: 4, cursor: 'pointer' }}>Cancel Edit</button>}
       </form>
       {message && <p role="status">{message}</p>}
-      <h2>Products ({products.length})</h2>
-      <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 12 }}>
+      <h2 style={{ margin: '40px 0 16px' }}>Products ({products.length})</h2>
+      <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead><tr>{['Product', 'Category', 'Selling price', 'Stock', 'Expiry', 'Action'].map(x => <th key={x} style={{ padding: 13, borderBottom: '1px solid #ddd' }}>{x}</th>)}</tr></thead>
+          <thead><tr>{['Product', 'Category', 'Selling price', 'Stock', 'Expiry', 'Action'].map(x => <th key={x} style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', textAlign: x === 'Selling price' || x === 'Stock' ? 'right' : 'left' }}>{x}</th>)}</tr></thead>
           <tbody>
             {products.map(p => <tr key={p.id}>
-              <td style={{ padding: 13 }}>{p.name}</td><td style={{ padding: 13 }}>{p.category}</td>
-              <td style={{ padding: 13 }}>₹{p.selling_price}</td><td style={{ padding: 13 }}>{p.stock_quantity} {p.unit}</td>
-              <td style={{ padding: 13 }}>{p.expiry_date ? String(p.expiry_date).slice(0, 10) : '—'}</td>
-              <td style={{ padding: 13 }}><button onClick={() => edit(p)}>Edit</button></td>
+              <td style={{ padding: '12px 16px' }}>{p.name}</td><td style={{ padding: '12px 16px' }}>{p.category}</td>
+              <td style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{p.selling_price}</td><td style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{p.stock_quantity} {p.unit}</td>
+              <td style={{ padding: '12px 16px' }}>{p.expiry_date ? String(p.expiry_date).slice(0, 10) : '—'}</td>
+              <td style={{ padding: '8px 16px' }}><button onClick={() => edit(p)} style={{ minHeight: 48, borderRadius: 4, padding: '0 16px', cursor: 'pointer' }}>Edit</button></td>
             </tr>)}
           </tbody>
         </table>
