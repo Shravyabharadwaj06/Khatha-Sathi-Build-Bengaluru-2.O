@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -81,6 +82,30 @@ ALLOWED_IMAGE_TYPES = {
 AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _sent_otps: dict[str, str] = {}
 _verified_phones: set[str] = set()
+
+# OTP rate limits (in memory, per phone number). Dev OTP has no SMS cost, but a real
+# provider will, and guessing must stay slow either way.
+OTP_RESEND_SECONDS = 30  # matches the Sign up page's resend countdown
+OTP_SENDS_PER_HOUR = 5
+OTP_FAILED_VERIFY_LIMIT = 5
+OTP_FAILED_VERIFY_WINDOW = 10 * 60
+_otp_sends: dict[str, list[float]] = {}
+_otp_failures: dict[str, list[float]] = {}
+
+
+def _recent(events: dict[str, list[float]], key: str, window: float, now: float) -> list[float]:
+    kept = [t for t in events.get(key, []) if now - t < window]
+    events[key] = kept
+    return kept
+
+
+def _too_many(message: str, retry_after: float) -> HTTPException:
+    seconds = max(1, int(retry_after + 0.999))
+    return HTTPException(
+        status_code=429,
+        detail=f"{message} Try again in {seconds} seconds.",
+        headers={"Retry-After": str(seconds), "X-Error-Field": "otp"},
+    )
 
 
 @dataclass(frozen=True)
@@ -358,6 +383,13 @@ def send_otp(body: OtpSendInput):
     payload = body.model_dump()
     phone = _normalize_phone(str(payload.get("phone", "")))
     code = _get_otp_code()
+    now = time.monotonic()
+    sends = _recent(_otp_sends, phone, 3600, now)
+    if sends and now - sends[-1] < OTP_RESEND_SECONDS:
+        raise _too_many("Please wait before asking for a new code.", OTP_RESEND_SECONDS - (now - sends[-1]))
+    if len(sends) >= OTP_SENDS_PER_HOUR:
+        raise _too_many("Too many codes were requested for this number.", 3600 - (now - sends[0]))
+    sends.append(now)
     _sent_otps[phone] = code
     _verified_phones.discard(phone)
     return {"sent": True}
@@ -368,11 +400,17 @@ def verify_otp(body: OtpVerifyInput):
     payload = body.model_dump()
     phone = _normalize_phone(str(payload.get("phone", "")))
     otp = str(payload.get("otp", "")).strip()
+    now = time.monotonic()
+    failures = _recent(_otp_failures, phone, OTP_FAILED_VERIFY_WINDOW, now)
+    if len(failures) >= OTP_FAILED_VERIFY_LIMIT:
+        raise _too_many("Too many wrong codes.", OTP_FAILED_VERIFY_WINDOW - (now - failures[0]))
     verified = _sent_otps.get(phone) == otp and len(otp) == 6
     if verified:
         _verified_phones.add(phone)
+        _otp_failures.pop(phone, None)
     else:
         _verified_phones.discard(phone)
+        failures.append(now)
     return {"verified": verified}
 
 
