@@ -68,7 +68,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(body.message ?? `Request failed (${res.status})`, body.field);
+  if (!res.ok) {
+    const detail = Array.isArray(body.detail)
+      ? body.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(', ')
+      : body.detail;
+    throw new ApiError(detail || body.message || `Request failed (${res.status})`, body.field);
+  }
   return body as T;
 }
 
