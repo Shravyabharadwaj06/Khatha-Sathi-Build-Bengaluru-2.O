@@ -8,9 +8,14 @@ Requires Node 18 or newer (tested on Node 24, npm 11).
 
 ```bash
 npm install
-cp .env.example .env
-npm run dev          # http://localhost:5173
+npm run dev          # after starting the backend and copying .env.example to .env
 ```
+
+For the connected local app, start the backend from `../backend` with
+`python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000`, then copy
+`.env.example` to `.env`. The frontend runs at http://localhost:5173 and uses
+the SQLite-backed API at http://localhost:8000. Local signup OTP: `123456`.
+Set `VITE_USE_MOCK_API=true` in `.env` to use the in-browser mock instead.
 
 ## Scripts
 
@@ -30,8 +35,8 @@ The first time, install the browser: `npx playwright install chromium`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VITE_USE_MOCK_API` | `true` | `true` uses the in-browser mock. `false` calls the real backend. |
-| `VITE_API_BASE_URL` | `http://localhost:8000/api` | Base URL of the real backend |
+| `VITE_USE_MOCK_API` | `false` (in `.env.example`) | `true` uses the in-browser mock. `false` calls the real backend. |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Base URL of the real backend |
 
 Never commit `.env`. Only `.env.example` is tracked.
 
@@ -43,6 +48,10 @@ Never commit `.env`. Only `.env.example` is tracked.
 | `/login` | Log in (Phone/Email tabs, PIN toggle, "Remember counter device") | `design-reference/log_in.html` |
 | `/signup` | Sign up (OTP with 30 s resend timer, "Other" domain field) | `design-reference/sign_up.html` |
 | `/home` | Home dashboard. Protected: redirects to `/login` without a session. | `design-reference/home_page_files/home_page.html` |
+| `/profile` | Shop and account settings. Protected. | `src/pages/Profile.tsx` |
+| `/report-issue` | Submit a support report with optional photos. Protected. | `src/pages/ReportIssue.tsx` |
+| `/report-sent` | Confirmation for the submitted support report. Protected. | `src/pages/ReportSent.tsx` |
+| `/reports` | View previously submitted support reports. Protected. | `src/pages/MyReports.tsx` |
 | `/terms`, `/privacy` | Legal pages with **placeholder** text. They use only the existing `.legal*` classes from the Landing CSS. | (not exported, composed from Landing CSS) |
 | `/logout` | Clears the session, then goes to `/login` | none |
 | anything else | Redirects to `/` | none |
@@ -53,13 +62,14 @@ A logged-in user who opens `/login` or `/signup` is sent to `/home`.
 
 ```
 src/
-  pages/        Landing, Login, Signup, Home, Legal
+  pages/        Landing, Login, Signup, Home, Profile, ReportIssue, ReportSent, MyReports, Legal
   styles/       landing.css, home.css, auth-base.css  (VERBATIM copies of the Stitch <style> blocks, do not edit)
                 auth.css (Tailwind input for the auth pages)
   hooks/        usePageStyles (route-scoped CSS), useRotator (welcome animations), useToast
   components/   LandingChrome (header/footer), AuthFooter, AuthToast, FieldError, Toast, ProtectedRoute, authPage
   config/       homeFeatures.ts: the 6 Home cards (add a `route` to each once its screen exists)
   services/     api.ts (API layer + mock), session.ts (local/session storage)
+  i18n/         Language selector, translations, and language preferences
   utils/        validation.ts
 scripts/        visual-compare.ts, interaction-check.ts
 design-reference/  Stitch exports (source of truth). home_page_OLD_DRAFT_do_not_use.html is the superseded draft.
@@ -85,7 +95,7 @@ Typed functions: `sendOtp`, `verifyOtp`, `signup`, `login`, `logout`, `getCurren
 
 The session is stored under `chotu.session`: in `localStorage` when "Remember counter device" is checked, otherwise in `sessionStorage`. Sign up always uses `localStorage`.
 
-**Backend team:** the REST paths in the `real` object are a proposal: `POST /auth/otp/send`, `POST /auth/otp/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, with Bearer token auth. Errors are `{ message, field? }`. Change them in `api.ts` only.
+The real API uses `POST /auth/otp/send`, `POST /auth/otp/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`, with Bearer token auth. Profile settings use `PUT /auth/profile`; support reports use `POST /support/reports` and `GET /support/reports`. Report photos and profile settings are stored in the local SQLite database. Backend validation errors are displayed from FastAPI's `detail` response.
 
 ## Visual comparison
 

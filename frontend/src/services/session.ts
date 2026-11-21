@@ -25,3 +25,16 @@ export function clearSession(): void {
     /* storage unavailable */
   }
 }
+
+export function updateSessionUser(updates: Partial<Session['user']>): Session | null {
+  const session = getSession();
+  if (!session) return null;
+  const updated: Session = { ...session, user: { ...session.user, ...updates } };
+  try {
+    if (localStorage.getItem(KEY)) localStorage.setItem(KEY, JSON.stringify(updated));
+    if (sessionStorage.getItem(KEY)) sessionStorage.setItem(KEY, JSON.stringify(updated));
+  } catch {
+    /* storage unavailable */
+  }
+  return updated;
+}

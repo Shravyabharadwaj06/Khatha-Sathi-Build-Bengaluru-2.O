@@ -1,17 +1,18 @@
 import hashlib
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import Base, engine, get_db
-from models import AppUser, Customer, Payment, Product, Transaction, TransactionItem
-from schemas import PaymentCreate, TransactionCreate, VoiceCommandInput
+from models import AppUser, Customer, Payment, Product, SupportReport, SupportReportAttachment, Transaction, TransactionItem
+from schemas import PaymentCreate, ProfileInput, TransactionCreate, VoiceCommandInput
 
 def migrate_existing_sqlite_schema():
     """Add columns introduced after the first local database was created."""
@@ -42,6 +43,14 @@ def migrate_existing_sqlite_schema():
                         f"ALTER TABLE transactions ADD COLUMN {column_name} {column_type}"
                     )
 
+        if "users" in table_names:
+            columns = {
+                row[1]
+                for row in connection.exec_driver_sql("PRAGMA table_info(users)").fetchall()
+            }
+            if "profile_settings" not in columns:
+                connection.exec_driver_sql("ALTER TABLE users ADD COLUMN profile_settings TEXT")
+
 
 migrate_existing_sqlite_schema()
 Base.metadata.create_all(bind=engine)
@@ -53,6 +62,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Error-Field"],
 )
 
 
@@ -166,6 +176,7 @@ def current_user(authorization: Optional[str] = Header(default=None), db: Sessio
 
 
 def public_app_user(user: AppUser):
+    profile_settings = json.loads(user.profile_settings or "{}")
     return {
         "id": str(user.id),
         "name": user.name,
@@ -173,6 +184,10 @@ def public_app_user(user: AppUser):
         "phone": user.phone,
         "city": user.city or "",
         "businessDomain": user.business_domain or "",
+        "shopName": profile_settings.get("shopName", ""),
+        "gstNumber": profile_settings.get("gstNumber", ""),
+        "fssaiNumber": profile_settings.get("fssaiNumber", ""),
+        "address": profile_settings.get("address", ""),
     }
 
 
@@ -186,6 +201,138 @@ def logout(authorization: Optional[str] = Header(default=None)):
 @app.get("/auth/me")
 def auth_me(user=Depends(current_user)):
     return public_app_user(user)
+
+
+@app.put("/auth/profile")
+def update_profile(payload: ProfileInput, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    phone = "".join(character for character in payload.phone if character.isdigit())[-10:]
+    if len(phone) != 10:
+        raise HTTPException(status_code=422, detail="Enter a valid 10-digit phone number", headers={"X-Error-Field": "phone"})
+
+    duplicate = db.query(AppUser).filter(AppUser.phone == phone, AppUser.id != user.id).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="An account with this phone number already exists.", headers={"X-Error-Field": "phone"})
+
+    user.name = payload.ownerName.strip()
+    user.phone = phone
+    user.business_domain = payload.businessDomain.strip()
+    user.profile_settings = json.dumps(payload.model_dump())
+    db.commit()
+    db.refresh(user)
+    return public_app_user(user)
+
+
+MAX_REPORT_ATTACHMENT_BYTES = 8 * 1024 * 1024
+MAX_REPORT_ATTACHMENTS = 2
+
+
+def public_support_report(report: SupportReport, attachments: list[SupportReportAttachment]):
+    return {
+        "id": str(report.id),
+        "reference": report.reference,
+        "categories": json.loads(report.categories),
+        "description": report.description,
+        "contactAllowed": report.contact_allowed,
+        "attachments": [
+            {"name": attachment.name, "type": attachment.media_type, "size": attachment.size}
+            for attachment in attachments
+        ],
+        "createdAt": report.created_at,
+    }
+
+
+@app.post("/support/reports")
+async def create_support_report(
+    categories: str = Form(...),
+    description: str = Form(...),
+    contactAllowed: str = Form(...),
+    attachments: list[UploadFile] = File(default=[]),
+    user: AppUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        parsed_categories = json.loads(categories)
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=422, detail="Issue categories must be valid JSON") from error
+
+    if not isinstance(parsed_categories, list) or not parsed_categories or len(parsed_categories) > 8:
+        raise HTTPException(status_code=422, detail="Choose between 1 and 8 issue categories")
+    if any(not isinstance(category, str) or not category.strip() for category in parsed_categories):
+        raise HTTPException(status_code=422, detail="Issue categories must be non-empty strings")
+
+    cleaned_description = description.strip()
+    if not cleaned_description or len(cleaned_description) > 1000:
+        raise HTTPException(status_code=422, detail="Describe the issue in 1 to 1000 characters")
+    if contactAllowed not in {"true", "false"}:
+        raise HTTPException(status_code=422, detail="contactAllowed must be true or false")
+    if len(attachments) > MAX_REPORT_ATTACHMENTS:
+        raise HTTPException(status_code=422, detail="You can attach up to 2 photos")
+
+    prepared_attachments = []
+    for attachment in attachments:
+        if not attachment.content_type or not attachment.content_type.startswith("image/"):
+            raise HTTPException(status_code=422, detail="Issue attachments must be images")
+        content = await attachment.read(MAX_REPORT_ATTACHMENT_BYTES + 1)
+        if len(content) > MAX_REPORT_ATTACHMENT_BYTES:
+            raise HTTPException(status_code=413, detail="Issue photos must be 8 MB or smaller")
+        prepared_attachments.append((
+            attachment.filename or "issue-photo",
+            attachment.content_type,
+            content,
+        ))
+
+    report = SupportReport(
+        user_id=user.id,
+        reference="",
+        categories=json.dumps(parsed_categories),
+        description=cleaned_description,
+        contact_allowed=contactAllowed == "true",
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(report)
+    db.flush()
+    report.reference = f"CH-{report.id:06d}"
+    report_attachments = [
+        SupportReportAttachment(
+            report_id=report.id,
+            name=name,
+            media_type=media_type,
+            size=len(content),
+            content=content,
+        )
+        for name, media_type, content in prepared_attachments
+    ]
+    db.add_all(report_attachments)
+    db.commit()
+    db.refresh(report)
+    return public_support_report(report, report_attachments)
+
+
+@app.get("/support/reports")
+def get_support_reports(user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    reports = (
+        db.query(SupportReport)
+        .filter(SupportReport.user_id == user.id)
+        .order_by(SupportReport.id.desc())
+        .all()
+    )
+    if not reports:
+        return []
+
+    report_ids = [report.id for report in reports]
+    attachments = (
+        db.query(SupportReportAttachment)
+        .filter(SupportReportAttachment.report_id.in_(report_ids))
+        .all()
+    )
+    attachments_by_report: dict[int, list[SupportReportAttachment]] = {}
+    for attachment in attachments:
+        attachments_by_report.setdefault(attachment.report_id, []).append(attachment)
+
+    return [
+        public_support_report(report, attachments_by_report.get(report.id, []))
+        for report in reports
+    ]
 
 
 @app.get("/products")

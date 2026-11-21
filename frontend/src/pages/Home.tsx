@@ -20,8 +20,7 @@ export default function Home() {
   return (
     <>
       <header className="shell topbar">
-        {/* TODO: My Profile screen. Logout currently lives at /logout. */}
-        <button className="top-action" type="button" data-action="My Profile" aria-label="My Profile" onClick={() => showToast('My Profile')}>
+        <button className="top-action" type="button" data-action="My Profile" aria-label="My Profile" onClick={() => navigate('/profile')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="12" cy="8" r="3.5"></circle>
             <path d="M4.8 20c.8-3.4 3.2-5.2 7.2-5.2s6.4 1.8 7.2 5.2"></path>

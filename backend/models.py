@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, Integer, String, Date, ForeignKey, Text
+from sqlalchemy import Boolean, Column, Float, Integer, LargeBinary, String, Date, ForeignKey, Text
 
 from database import Base
 
@@ -75,3 +75,27 @@ class AppUser(Base):
     password_hash = Column(String, nullable=False)
     city = Column(String, nullable=True)
     business_domain = Column(String, nullable=True)
+    profile_settings = Column(Text, nullable=True)
+
+
+class SupportReport(Base):
+    __tablename__ = "support_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    reference = Column(String, nullable=False, unique=True, index=True)
+    categories = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
+    contact_allowed = Column(Boolean, nullable=False, default=True)
+    created_at = Column(String, nullable=False)
+
+
+class SupportReportAttachment(Base):
+    __tablename__ = "support_report_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("support_reports.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    media_type = Column(String, nullable=False)
+    size = Column(Integer, nullable=False)
+    content = Column(LargeBinary, nullable=False)

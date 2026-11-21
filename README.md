@@ -8,17 +8,27 @@ A voice-first billing and udhaar (credit) ledger for kirana shopkeepers. The pro
 
 | Folder | What it contains |
 |---|---|
-| [`frontend/`](frontend/) | React 18 + Vite + TypeScript web app (Landing, Log in, Sign up, Home dashboard, Terms/Privacy). It runs on its own against a mock API. See [`frontend/README.md`](frontend/README.md). |
+| [`frontend/`](frontend/) | React 18 + Vite + TypeScript web app (Landing, Log in, Sign up, Home dashboard, Terms/Privacy). See [`frontend/README.md`](frontend/README.md). |
 | [`frontend/design-reference/`](frontend/design-reference/) | The approved Google Stitch exports the frontend is built from (source of truth for visuals). |
-| `backend/` | *(coming)* Voice/ASR, ledger and auth services. |
+| `backend/` | FastAPI auth, inventory, customer ledger, transactions, reports, and SQLite persistence. |
 
-## Quick start (frontend)
+## Quick start (full stack)
 
-```bash
-cd frontend
-npm install
-cp .env.example .env      # VITE_USE_MOCK_API=true by default
-npm run dev               # http://localhost:5173
+Start the backend in one terminal:
+
+```powershell
+cd backend
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Demo login (mock API): phone **9876543210** or email **demo@chotu.shop**, PIN **123456**.
+Start the frontend in a second terminal:
+
+```powershell
+cd frontend
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+Open **http://localhost:5173**. The backend is available at **http://localhost:8000** and its interactive API docs at **http://localhost:8000/docs**. SQLite database tables are created automatically in `backend/khatha.db`. Create an account in the app; the local development OTP is **123456**.
