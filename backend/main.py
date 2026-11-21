@@ -7,7 +7,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional
 
@@ -1256,7 +1256,7 @@ def _entry_dict(row) -> dict:
         "customer_id": str(row["customer_id"]) if row["customer_id"] else None,
         "total_amount": amount,
         "paid_amount": paid,
-        "payment_method": payment_mode,
+        "payment_method": row["payment_mode"],
         "transaction_date": _iso(row["created_at"]),
         "status": "paid" if row["paid_paise"] >= row["amount_paise"] else "partial",
         "notes": row["note"],
@@ -2225,3 +2225,107 @@ voice_router = create_voice_router(
     ),
 )
 app.include_router(voice_router)
+
+@app.get("/quick-update")
+def get_quick_update(
+    period: str = "week",
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    """Read-only metrics for the Stitch Quick Update / dashboard screen."""
+    period = period.strip().lower()
+    if period not in {"today", "yesterday", "week", "month", "custom"}:
+        raise HTTPException(status_code=422, detail="period must be today, yesterday, week, month, or custom")
+
+    now = datetime.now(timezone.utc)
+    if period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "yesterday":
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = today - timedelta(days=1)
+        end = today
+    elif period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start = now - timedelta(days=7)
+
+    end = locals().get("end", now)
+
+    rows = _all(
+        db,
+        """
+        select id, customer_id, type, amount_paise, paid_paise,
+               due_delta_paise, payment_mode, created_at
+          from public.ledger_entries
+         where shop_id = :shop_id
+           and created_at >= :start_at
+           and created_at < :end_at
+         order by created_at desc, id desc
+        """,
+        {"shop_id": context.shop_id, "start_at": start, "end_at": end},
+    )
+
+    active_entries = [row for row in rows if row["type"] != "reversal"]
+    sale_entries = [row for row in active_entries if row["type"] == "sale"]
+    payment_entries = [row for row in active_entries if row["type"] == "payment"]
+
+    total_sales_paise = sum(int(row["amount_paise"] or 0) for row in sale_entries)
+    cash_paise = sum(
+        int(row["paid_paise"] or 0)
+        for row in active_entries
+        if row["payment_mode"] == "cash"
+    )
+    upi_paise = sum(
+        int(row["paid_paise"] or 0)
+        for row in active_entries
+        if row["payment_mode"] == "upi"
+    )
+    udhaar_paise = sum(
+        int(row["due_delta_paise"] or 0)
+        for row in sale_entries
+        if int(row["due_delta_paise"] or 0) > 0
+    )
+    udhaar_customer_ids = {
+        str(row["customer_id"])
+        for row in sale_entries
+        if row["customer_id"] and int(row["due_delta_paise"] or 0) > 0
+    }
+
+    collected_paise = sum(int(row["amount_paise"] or 0) for row in payment_entries)
+
+    balances = _all(
+        db,
+        """
+        select balance_paise
+          from public.customer_balances
+         where shop_id = :shop_id
+        """,
+        {"shop_id": context.shop_id},
+    )
+    total_outstanding_paise = sum(max(int(row["balance_paise"] or 0), 0) for row in balances)
+
+    recent = []
+    for row in active_entries[:10]:
+        recent.append({
+            "id": str(row["id"]),
+            "customer_id": str(row["customer_id"]) if row["customer_id"] else None,
+            "type": row["type"],
+            "amount": _rupees(row["amount_paise"]),
+            "paid_amount": _rupees(row["paid_paise"]),
+            "payment_method": row["payment_mode"],
+            "transaction_date": _iso(row["created_at"]),
+            "status": "paid" if int(row["paid_paise"] or 0) >= int(row["amount_paise"] or 0) else "partial",
+        })
+
+    return {
+        "period": period,
+        "total_sales": _rupees(total_sales_paise),
+        "bill_count": len(sale_entries),
+        "cash_box": _rupees(cash_paise),
+        "upi_received": _rupees(upi_paise),
+        "udhaar_given": _rupees(udhaar_paise),
+        "udhaar_customer_count": len(udhaar_customer_ids),
+        "collected_this_period": _rupees(collected_paise),
+        "total_outstanding": _rupees(total_outstanding_paise),
+        "recent_transactions": recent,
+    }

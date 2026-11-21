@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 import pytest
+from datetime import datetime, timezone
 
 import database
 import main
@@ -133,3 +134,64 @@ def test_dashboard_counts_active_customers_and_nets_reversals(monkeypatch):
     assert result["total_customers"] == 1
     assert result["total_sales"] == 30
     assert result["total_outstanding"] == 20
+
+
+def test_quick_update_calculates_stitch_metrics(monkeypatch):
+    now = datetime.now(timezone.utc)
+    entries = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "customer_id": "00000000-0000-0000-0000-000000000010",
+            "type": "sale",
+            "amount_paise": 18450,
+            "paid_paise": 7850,
+            "due_delta_paise": 10600,
+            "payment_mode": "cash",
+            "created_at": now,
+        },
+        {
+            "id": "00000000-0000-0000-0000-000000000002",
+            "customer_id": None,
+            "type": "payment",
+            "amount_paise": 1900,
+            "paid_paise": 1900,
+            "due_delta_paise": -1900,
+            "payment_mode": "upi",
+            "created_at": now,
+        },
+    ]
+
+    def fake_all(*args):
+        query = args[1]
+        if "ledger_entries" in query:
+            return entries
+        if "customer_balances" in query:
+            return [{"balance_paise": 34200}]
+        return []
+
+    monkeypatch.setattr(main, "_all", fake_all)
+
+    result = main.get_quick_update(
+        "week",
+        main.AuthContext("user", "shop", "user@example.com"),
+        None,
+    )
+
+    assert result["period"] == "week"
+    assert result["total_sales"] == 184.5
+    assert result["cash_box"] == 78.5
+    assert result["upi_received"] == 19
+    assert result["udhaar_given"] == 106
+    assert result["udhaar_customer_count"] == 1
+    assert result["collected_this_period"] == 19
+    assert result["total_outstanding"] == 342
+    assert len(result["recent_transactions"]) == 2
+
+
+def test_quick_update_rejects_unknown_period():
+    with pytest.raises(HTTPException, match="period"):
+        main.get_quick_update(
+            "quarter",
+            main.AuthContext("user", "shop", "user@example.com"),
+            None,
+        )
