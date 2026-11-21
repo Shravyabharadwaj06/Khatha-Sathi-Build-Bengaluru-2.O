@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -51,22 +52,22 @@ class CustomerUpdate(BaseModel):
 
 
 class TransactionItemInput(BaseModel):
-    product_id: int
-    quantity: float = Field(gt=0)
+    product_id: str
+    quantity: Decimal = Field(gt=0)
 
 
 class TransactionCreate(BaseModel):
     transaction_type: str
-    customer_id: Optional[int] = None
+    customer_id: Optional[str] = None
     items: list[TransactionItemInput]
     payment_method: str = "cash"
-    paid_amount: Optional[float] = Field(default=None, ge=0)
+    paid_amount: Optional[Decimal] = Field(default=None, ge=0)
     notes: Optional[str] = None
 
 
 class PaymentCreate(BaseModel):
-    customer_id: int
-    amount: float = Field(gt=0)
+    customer_id: str
+    amount: Decimal = Field(gt=0)
     payment_method: str = "cash"
     notes: Optional[str] = None
 

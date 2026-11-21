@@ -8,7 +8,7 @@
  * Backend team: the REST paths/payloads in `real` are a proposal — change them
  * here and nowhere else.
  */
-import { getSession } from './session';
+import { clearSession, getSession, replaceSession } from './session';
 import { ApiError } from './errors';
 import { voiceMock } from './voiceMock';
 import type {
@@ -35,6 +35,10 @@ export interface User {
 
 export interface Session {
   token: string;
+  /** Supabase refresh token (real backend); used to renew `token` when it expires. */
+  refreshToken?: string;
+  /** Unix seconds when `token` expires (real backend). */
+  expiresAt?: number;
   user: User;
 }
 
@@ -98,31 +102,81 @@ const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').
 // ---------------------------------------------------------------------------
 // Real implementation
 // ---------------------------------------------------------------------------
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getSession()?.token;
+function requestHeaders(init: RequestInit, token?: string): HeadersInit {
   const isMultipart = init.body instanceof FormData;
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      ...(!isMultipart ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const detail = typeof body.detail === 'string'
-      ? body.detail
-      : Array.isArray(body.detail)
-        ? body.detail.map((issue: { msg?: string }) => issue.msg).filter(Boolean).join(', ')
-        : undefined;
-    throw new ApiError(
-      body.message ?? detail ?? `Request failed (${res.status})`,
-      body.field ?? res.headers.get('X-Error-Field') ?? undefined,
-    );
+  return {
+    ...(!isMultipart && init.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...init.headers,
+  };
+}
+
+/** Turns any backend error body into an ApiError: `{detail}`, `{message, field}` or the voice contract's `{error: {code, message}}`. */
+function apiError(res: Response, body: Record<string, unknown>): ApiError {
+  const err = body.error && typeof body.error === 'object' ? (body.error as { code?: string; message?: string }) : undefined;
+  const detail = typeof body.detail === 'string'
+    ? body.detail
+    : Array.isArray(body.detail)
+      ? body.detail.map((issue: { msg?: string }) => issue.msg).filter(Boolean).join(', ')
+      : undefined;
+  return new ApiError(
+    err?.message ?? (typeof body.message === 'string' ? body.message : undefined) ?? detail ?? `Request failed (${res.status})`,
+    typeof body.field === 'string' ? body.field : res.headers.get('X-Error-Field') ?? undefined,
+    err?.code ?? (res.status === 401 ? 'UNAUTHORIZED' : undefined),
+    res.status,
+  );
+}
+
+let refreshInFlight: Promise<Session> | undefined;
+
+/** One refresh at a time; concurrent 401s wait for the same refresh. */
+async function refreshSession(refreshToken: string): Promise<Session> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        clearSession();
+        throw apiError(res, body);
+      }
+      const session = body as Session;
+      replaceSession(session);
+      return session;
+    })().finally(() => {
+      refreshInFlight = undefined;
+    });
   }
+  return refreshInFlight;
+}
+
+const noRefreshPaths = new Set(['/auth/login', '/auth/signup', '/auth/refresh', '/auth/logout', '/auth/otp/send', '/auth/otp/verify']);
+
+/** fetch with the login token; on 401 it refreshes the Supabase session once and retries. */
+async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  let session = getSession();
+  const send = (token?: string) => fetch(`${BASE_URL}${path}`, { ...init, headers: requestHeaders(init, token) });
+  let res = await send(session?.token);
+  if (res.status === 401 && session?.refreshToken && !noRefreshPaths.has(path)) {
+    session = await refreshSession(session.refreshToken);
+    res = await send(session.token);
+  }
+  if (res.status === 401 && session?.refreshToken && !noRefreshPaths.has(path)) clearSession();
+  return res;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await authedFetch(path, init);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw apiError(res, body);
   return body as T;
 }
+
+/** Authenticated JSON request to any backend path (used by the Products / Customers pages). */
+export const apiRequest = <T,>(path: string, init: RequestInit = {}): Promise<T> => request<T>(path, init);
 
 const real = {
   sendOtp: (phone: string) => request<{ sent: true }>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ phone }) }),
@@ -294,32 +348,14 @@ export const listIssueReports = (): Promise<IssueReport[]> => impl.listIssueRepo
 export const VOICE_INPUT_MODE: 'gnani' | 'browser' = import.meta.env.VITE_VOICE_INPUT === 'browser' ? 'browser' : 'gnani';
 
 async function voiceFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getSession()?.token;
-  const isMultipart = init.body instanceof FormData;
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
-      ...init,
-      headers: {
-        ...(!isMultipart && init.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...init.headers,
-      },
-    });
-  } catch {
+    res = await authedFetch(path, init);
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
     throw new ApiError('Cannot reach the server. Check the internet connection.', undefined, 'NETWORK');
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = (body && typeof body.error === 'object' && body.error) || {};
-    const detail = typeof body?.detail === 'string' ? body.detail : undefined;
-    throw new ApiError(
-      err.message ?? detail ?? `Request failed (${res.status})`,
-      undefined,
-      err.code ?? (res.status === 401 ? 'UNAUTHORIZED' : undefined),
-      res.status,
-    );
-  }
+  if (!res.ok) throw apiError(res, await res.json().catch(() => ({})));
   return res;
 }
 
