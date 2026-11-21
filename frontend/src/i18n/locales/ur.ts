@@ -18,6 +18,15 @@ export const urTranslations: Partial<Record<TranslationKey, string>> = {
   'nav.storeSettings': 'دکان کی ترتیبات',
   'nav.terms': 'شرائط و ضوابط',
   'nav.privacy': 'رازداری کی پالیسی',
+  'nav.assistant': 'AI معاون',
+  'nav.products': 'مصنوعات',
+  'nav.customers': 'گاہک',
+  'nav.myReports': 'میری رپورٹس',
+  'nav.reportIssue': 'مسئلہ بتائیں',
+  'nav.profile': 'پروفائل',
+  'nav.menu': 'مینو',
+  'nav.closeMenu': 'مینو بند کریں',
+  'nav.mainMenu': 'مرکزی مینو',
 
   // Landing Page
   'landing.hero.eyebrow': 'آپ کی دکان کے لیے ایک چھوٹا مددگار',

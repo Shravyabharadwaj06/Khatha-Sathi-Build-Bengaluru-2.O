@@ -405,11 +405,6 @@ export default function Assistant() {
   return (
     <div className="va">
       <header className="va-top">
-        <button type="button" className="va-icon-btn" aria-label="Back to home" onClick={() => navigate('/home')}>
-          <span className="material-symbols-outlined" aria-hidden="true">
-            arrow_back
-          </span>
-        </button>
         <div className="va-title">
           <h1>Chotu</h1>
           <p>{inputMode === 'browser' ? 'Browser voice' : 'Voice assistant'}</p>

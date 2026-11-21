@@ -18,6 +18,15 @@ export const knTranslations: Partial<Record<TranslationKey, string>> = {
   'nav.storeSettings': 'ಅಂಗಡಿ ಸೆಟ್ಟಿಂಗ್ಸ್',
   'nav.terms': 'ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳು',
   'nav.privacy': 'ಗೌಪ್ಯತಾ ನೀತಿ',
+  'nav.assistant': 'AI ಸಹಾಯಕ',
+  'nav.products': 'ಉತ್ಪನ್ನಗಳು',
+  'nav.customers': 'ಗ್ರಾಹಕರು',
+  'nav.myReports': 'ನನ್ನ ವರದಿಗಳು',
+  'nav.reportIssue': 'ಸಮಸ್ಯೆ ವರದಿ ಮಾಡಿ',
+  'nav.profile': 'ಪ್ರೊಫೈಲ್',
+  'nav.menu': 'ಮೆನು',
+  'nav.closeMenu': 'ಮೆನು ಮುಚ್ಚಿ',
+  'nav.mainMenu': 'ಮುಖ್ಯ ಮೆನು',
 
   // Landing Page
   'landing.hero.eyebrow': 'ನಿಮ್ಮ ಅಂಗಡಿಗೆ ಒಂದು ಸಣ್ಣ ನೆರವು',

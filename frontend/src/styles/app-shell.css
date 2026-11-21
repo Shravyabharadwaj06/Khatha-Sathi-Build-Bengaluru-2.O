@@ -1,0 +1,396 @@
+/*
+ * App shell for logged-in pages (components/shell/AppShell.tsx). Injected only while a protected route
+ * is mounted (hooks/usePageStyles.ts), so it never reaches Landing / Log in / Sign up / Terms / Privacy.
+ *
+ * Shared rules (design-reference/DESIGN.md): 8px spacing grid (4 / 8 / 16 / 24 / 40), one content
+ * container (max 1120px; 24px padding, 16px on phones), 48px controls, 4px radius (8px max on cards),
+ * 1px indigo borders, hard offset shadows only. Each page keeps its own fonts and colours.
+ * Every shell rule sets its properties explicitly because page stylesheets (Home's `*` rule, Tailwind's
+ * preflight on Profile) are present at the same time.
+ */
+:root {
+  --cs-ink: #0f0f56;
+  --cs-blue: #c2dce3;
+  --cs-yellow: #edea43;
+  --cs-paper: #faf9f5;
+  --cs-white: #ffffff;
+  --cs-line: rgba(15, 15, 86, 0.12);
+  --cs-muted: #464650;
+  --cs-space-1: 4px;
+  --cs-space-2: 8px;
+  --cs-space-3: 16px;
+  --cs-space-4: 24px;
+  --cs-space-5: 40px;
+  --cs-container: 1120px;
+  --cs-pad: 24px;
+  --cs-sidebar-w: 240px;
+  --cs-topbar-h: 0px;
+}
+
+/* ------------------------------------------------------------------ frame */
+.cs-root {
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-left: var(--cs-sidebar-w);
+  padding-top: var(--cs-topbar-h);
+}
+.cs-root *,
+.cs-root *::before,
+.cs-root *::after {
+  box-sizing: border-box;
+}
+
+.cs-content {
+  outline: none;
+  min-width: 0;
+}
+.cs-container {
+  width: 100%;
+  max-width: calc(var(--cs-container) + 2 * var(--cs-pad));
+  margin: 0 auto;
+  padding: var(--cs-space-5) var(--cs-pad) var(--cs-space-5);
+}
+.cs-root--flush .cs-container {
+  max-width: none;
+  padding: 0;
+}
+
+.cs-skip {
+  position: fixed;
+  z-index: 200;
+  top: 8px;
+  left: 8px;
+  padding: 12px 16px;
+  background: var(--cs-ink);
+  color: var(--cs-white);
+  font: 600 14px/1.2 'Work Sans', Arial, sans-serif;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.cs-skip:focus {
+  transform: none;
+  outline: 3px solid var(--cs-yellow);
+}
+
+/* ------------------------------------------------------------------ brand */
+.cs-brand {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  text-decoration: none;
+}
+.cs-brand img {
+  display: block;
+  width: 132px;
+  max-width: 100%;
+  height: auto;
+  max-height: 44px;
+  object-fit: contain;
+}
+
+/* ------------------------------------------------------------------ sidebar (desktop) */
+.cs-sidebar {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--cs-sidebar-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-4);
+  padding: var(--cs-space-4) var(--cs-space-3);
+  overflow-y: auto;
+  background: var(--cs-white);
+  border-right: 1px solid var(--cs-line);
+  font-family: 'Work Sans', Arial, sans-serif;
+}
+.cs-sidebar .cs-brand {
+  padding: 0 var(--cs-space-2);
+}
+
+.cs-menu {
+  display: grid;
+  gap: var(--cs-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cs-menu li {
+  margin: 0;
+  padding: 0;
+}
+.cs-menu-foot {
+  margin-top: auto;
+  padding-top: var(--cs-space-3);
+  border-top: 1px solid var(--cs-line);
+}
+
+.cs-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 var(--cs-space-3) 0 13px;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  color: var(--cs-ink);
+  font: 600 15px/1.2 'Work Sans', Arial, sans-serif;
+  letter-spacing: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cs-link:hover {
+  background: #f1f1ea;
+}
+.cs-link:focus-visible {
+  outline: 3px solid var(--cs-ink);
+  outline-offset: -3px;
+}
+.cs-link.is-active {
+  border-left-color: var(--cs-ink);
+  background: var(--cs-blue);
+  font-weight: 700;
+}
+.cs-link-icon.material-symbols-outlined {
+  flex: none;
+  font-size: 22px;
+  line-height: 1;
+}
+.cs-logout {
+  color: #93000a;
+}
+
+/* ------------------------------------------------------------------ mobile top bar + drawer */
+.cs-topbar {
+  display: none;
+}
+.cs-menu-button {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--cs-ink);
+  border-radius: 4px;
+  background: var(--cs-white);
+  color: var(--cs-ink);
+  cursor: pointer;
+}
+.cs-menu-button:focus-visible {
+  outline: 3px solid var(--cs-ink);
+  outline-offset: 2px;
+}
+.cs-menu-button .material-symbols-outlined {
+  font-size: 24px;
+}
+.cs-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  background: rgba(15, 15, 86, 0.45);
+}
+.cs-drawer {
+  position: fixed;
+  z-index: 70;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(300px, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+  padding: var(--cs-space-3);
+  overflow-y: auto;
+  background: var(--cs-white);
+  border-right: 1px solid var(--cs-ink);
+  font-family: 'Work Sans', Arial, sans-serif;
+}
+.cs-drawer[hidden] {
+  display: none;
+}
+.cs-drawer nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.cs-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-2);
+}
+
+/* ------------------------------------------------------------------ shared page parts */
+.cs-pagehead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  margin: 0 0 var(--cs-space-4);
+}
+.cs-pagehead > :first-child {
+  min-width: 0;
+}
+.cs-pagehead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cs-space-2);
+}
+
+/* ------------------------------------------------------------------ Home (dashboard) */
+.cs-content .cs-home {
+  width: auto;
+  margin: 0;
+}
+.cs-content .cs-home .heading {
+  padding: 0;
+}
+.cs-content .cs-home .grid {
+  gap: var(--cs-space-4);
+  padding: 0 0 var(--cs-space-5);
+}
+.cs-content .cs-home .footer {
+  padding: var(--cs-space-3) 0 0;
+}
+
+/* ------------------------------------------------------------------ Report pages */
+.cs-content .report-page {
+  min-height: 0;
+}
+.cs-content .report-main,
+.cs-content .report-main.reports-main,
+.cs-content .report-main.confirmation-main {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------ AI Assistant (full-height page) */
+.cs-root--flush .va {
+  height: calc(100vh - var(--cs-topbar-h));
+  height: calc(100dvh - var(--cs-topbar-h));
+  max-width: none;
+  border-left: 0;
+  border-right: 0;
+}
+.cs-root--flush .va-top {
+  padding-left: var(--cs-pad);
+  padding-right: var(--cs-pad);
+}
+.cs-root--flush .va-feed > *,
+.cs-root--flush .va-dock > * {
+  width: 100%;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ------------------------------------------------------------------ Tablet: icon rail */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --cs-sidebar-w: 76px;
+  }
+  .cs-sidebar {
+    align-items: center;
+    padding: var(--cs-space-3) var(--cs-space-2);
+    overflow: visible;
+  }
+  .cs-sidebar .cs-brand {
+    padding: 0;
+  }
+  .cs-sidebar .cs-brand img {
+    width: 56px;
+  }
+  .cs-sidebar .cs-menu,
+  .cs-sidebar .cs-menu-foot {
+    width: 100%;
+  }
+  .cs-sidebar .cs-link {
+    justify-content: center;
+    padding: 0;
+    border-left-width: 3px;
+  }
+  /* Label becomes a tooltip on hover / keyboard focus */
+  .cs-sidebar .cs-link-label {
+    position: absolute;
+    z-index: 50;
+    top: 50%;
+    left: calc(100% + 10px);
+    padding: 8px 12px;
+    border-radius: 4px;
+    background: var(--cs-ink);
+    color: var(--cs-white);
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+  .cs-sidebar .cs-link:hover .cs-link-label,
+  .cs-sidebar .cs-link:focus-visible .cs-link-label {
+    opacity: 1;
+  }
+  .cs-content .cs-home .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ------------------------------------------------------------------ Phone: top bar + drawer */
+@media (max-width: 767px) {
+  :root {
+    --cs-sidebar-w: 0px;
+    --cs-topbar-h: 64px;
+    --cs-pad: 16px;
+  }
+  .cs-sidebar {
+    display: none;
+  }
+  .cs-topbar {
+    position: fixed;
+    z-index: 50;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--cs-topbar-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cs-space-2);
+    padding: 0 var(--cs-pad);
+    background: var(--cs-white);
+    border-bottom: 1px solid var(--cs-line);
+  }
+  .cs-brand--top img {
+    width: 120px;
+    max-height: 40px;
+  }
+  .cs-topbar-spacer {
+    width: 48px;
+  }
+  .cs-container {
+    padding: var(--cs-space-4) var(--cs-pad) var(--cs-space-5);
+  }
+  .cs-content .cs-home .grid {
+    gap: var(--cs-space-3);
+  }
+}
+
+@media (max-width: 360px) {
+  .cs-content .cs-home .grid {
+    gap: var(--cs-space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-skip {
+    transition: none;
+  }
+}

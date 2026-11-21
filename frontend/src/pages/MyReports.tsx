@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { usePageStyles } from '../hooks/usePageStyles';
 import { listIssueReports, type IssueReport } from '../services/api';
 import reportCss from '../styles/report.css?raw';
@@ -21,7 +21,6 @@ function formatCreatedAt(dateValue: string): string {
 
 export default function MyReports() {
   usePageStyles({ css: [reportCss], bodyClass: 'report-body', title: 'CHOTU.ai | My reports' });
-  const navigate = useNavigate();
   const [reports, setReports] = useState<IssueReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,15 +44,9 @@ export default function MyReports() {
 
   return (
     <div className="report-page">
-      <header className="report-header">
-        <button className="report-back" type="button" aria-label="Back to shop" onClick={() => navigate('/home')}>
-          <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-        </button>
-        <h1>My Reports</h1>
-        <Link className="report-profile" to="/profile" aria-label="My profile">
-          <span className="material-symbols-outlined" aria-hidden="true">person</span>
-        </Link>
-      </header>
+      <div className="cs-pagehead report-pagehead">
+        <h1 className="report-title">My Reports</h1>
+      </div>
       <main className="report-main reports-main">
         <section className="reports-heading">
           <p className="report-kicker">Support history</p>

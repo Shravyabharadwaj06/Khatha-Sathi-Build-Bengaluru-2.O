@@ -13,6 +13,7 @@ import Products from './pages/Products';
 import Customers from './pages/Customers';
 import Assistant from './pages/Assistant';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import AppShell from './components/shell/AppShell';
 import { logout } from './services/api';
 import { clearSession, getSession } from './services/session';
 
@@ -59,15 +60,17 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<GuestOnly><Login /></GuestOnly>} />
         <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
-        <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-
-        <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-        <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/report-issue" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
-        <Route path="/report-sent" element={<ProtectedRoute><ReportSent /></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
-        <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
+        {/* Logged-in pages share one layout: sidebar / drawer + page container */}
+        <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+          <Route path="/home" element={<Home />} />
+          <Route path="/assistant" element={<Assistant />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/customers" element={<Customers />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/report-issue" element={<ReportIssue />} />
+          <Route path="/report-sent" element={<ReportSent />} />
+          <Route path="/reports" element={<MyReports />} />
+        </Route>
 
         <Route path="/terms" element={<Legal kind="terms" />} />
         <Route path="/privacy" element={<Legal kind="privacy" />} />

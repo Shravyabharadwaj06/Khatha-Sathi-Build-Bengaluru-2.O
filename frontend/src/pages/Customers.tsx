@@ -83,45 +83,47 @@ export default function Customers() {
   };
 
   return (
-    <main style={{ maxWidth: 1050, margin: '35px auto', padding: 24, color: '#17243b' }}>
-      <button onClick={() => history.back()} style={{ padding: '10px 16px', cursor: 'pointer' }}>← Back</button>
+    <main style={{ color: '#17243b' }}>
+      <button onClick={() => history.back()} style={{ padding: '0 16px', minHeight: 48, borderRadius: 4, cursor: 'pointer' }}>← Back</button>
 
-      <h1>Customer Update</h1>
-      <p>Add customers and manage their contact details and credit score.</p>
+      <h1 style={{ margin: '24px 0 8px' }}>Customer Update</h1>
+      <p style={{ margin: '0 0 24px' }}>Add customers and manage their contact details and credit score.</p>
 
       <form onSubmit={save} style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))',
-        gap: 14,
+        gap: 16,
+        alignItems: 'end',
         background: '#fff',
-        padding: 22,
-        borderRadius: 16
+        padding: 24,
+        borderRadius: 8
       }}>
-        <label style={{ display: 'grid', gap: 6, fontWeight: 600 }}>
+        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
           Customer name
-          <input name="name" value={form.name} onChange={change} required style={{ padding: 12, border: '1px solid #ccd3df', borderRadius: 8 }} />
+          <input name="name" value={form.name} onChange={change} required style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
         </label>
 
-        <label style={{ display: 'grid', gap: 6, fontWeight: 600 }}>
+        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
           Phone number
-          <input name="phone_number" value={form.phone_number} onChange={change} style={{ padding: 12, border: '1px solid #ccd3df', borderRadius: 8 }} />
+          <input name="phone_number" value={form.phone_number} onChange={change} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
         </label>
 
-        <label style={{ display: 'grid', gap: 6, fontWeight: 600 }}>
+        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
           WhatsApp number
-          <input name="whatsapp_number" value={form.whatsapp_number} onChange={change} style={{ padding: 12, border: '1px solid #ccd3df', borderRadius: 8 }} />
+          <input name="whatsapp_number" value={form.whatsapp_number} onChange={change} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
         </label>
 
-        <label style={{ display: 'grid', gap: 6, fontWeight: 600 }}>
+        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
           Credit score
-          <input name="credit_score" type="number" min="0" value={form.credit_score} onChange={change} style={{ padding: 12, border: '1px solid #ccd3df', borderRadius: 8 }} />
+          <input name="credit_score" type="number" min="0" value={form.credit_score} onChange={change} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
         </label>
 
         <button type="submit" style={{
-          padding: 13,
+          padding: '0 16px',
+          minHeight: 48,
           background: '#f5c842',
           border: 0,
-          borderRadius: 9,
+          borderRadius: 4,
           fontWeight: 700,
           cursor: 'pointer'
         }}>
@@ -132,7 +134,7 @@ export default function Customers() {
           <button type="button" onClick={() => {
             setEditing(null);
             setForm(emptyForm);
-          }}>
+          }} style={{ minHeight: 48, borderRadius: 4, cursor: 'pointer' }}>
             Cancel Edit
           </button>
         )}
@@ -140,26 +142,26 @@ export default function Customers() {
 
       {message && <p role="status">{message}</p>}
 
-      <h2>Customers ({customers.length})</h2>
+      <h2 style={{ margin: '40px 0 16px' }}>Customers ({customers.length})</h2>
 
-      <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 12 }}>
+      <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr>
               {['Name', 'Phone', 'WhatsApp', 'Credit score', 'Action'].map(x =>
-                <th key={x} style={{ padding: 13, borderBottom: '1px solid #ddd' }}>{x}</th>
+                <th key={x} style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', textAlign: x === 'Credit score' ? 'right' : 'left' }}>{x}</th>
               )}
             </tr>
           </thead>
           <tbody>
             {customers.map(c => (
               <tr key={c.id}>
-                <td style={{ padding: 13 }}>{c.name}</td>
-                <td style={{ padding: 13 }}>{c.phone_number || '—'}</td>
-                <td style={{ padding: 13 }}>{c.whatsapp_number || '—'}</td>
-                <td style={{ padding: 13 }}>{c.credit_score ?? '—'}</td>
-                <td style={{ padding: 13 }}>
-                  <button onClick={() => edit(c)}>Edit</button>
+                <td style={{ padding: '12px 16px' }}>{c.name}</td>
+                <td style={{ padding: '12px 16px', fontVariantNumeric: 'tabular-nums' }}>{c.phone_number || '—'}</td>
+                <td style={{ padding: '12px 16px', fontVariantNumeric: 'tabular-nums' }}>{c.whatsapp_number || '—'}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{c.credit_score ?? '—'}</td>
+                <td style={{ padding: '8px 16px' }}>
+                  <button onClick={() => edit(c)} style={{ minHeight: 48, borderRadius: 4, padding: '0 16px', cursor: 'pointer' }}>Edit</button>
                 </td>
               </tr>
             ))}

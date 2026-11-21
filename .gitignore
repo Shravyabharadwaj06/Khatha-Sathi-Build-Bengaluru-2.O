@@ -25,3 +25,8 @@ backend/*.db
 
 # Local MCP client config (may contain tokens)
 .mcp.json
+
+# UI polish review screenshots (local only)
+ui-before/
+ui-after/
+ui-compare.html

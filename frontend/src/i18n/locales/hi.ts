@@ -18,6 +18,15 @@ export const hiTranslations: Partial<Record<TranslationKey, string>> = {
   'nav.storeSettings': 'दुकान सेटिंग्स',
   'nav.terms': 'नियम और शर्तें',
   'nav.privacy': 'गोपनीयता नीति',
+  'nav.assistant': 'AI सहायक',
+  'nav.products': 'उत्पाद',
+  'nav.customers': 'ग्राहक',
+  'nav.myReports': 'मेरी रिपोर्ट',
+  'nav.reportIssue': 'समस्या बताएं',
+  'nav.profile': 'प्रोफाइल',
+  'nav.menu': 'मेनू',
+  'nav.closeMenu': 'मेनू बंद करें',
+  'nav.mainMenu': 'मुख्य मेनू',
 
   // Landing Page
   'landing.hero.eyebrow': 'आपकी दुकान के लिए एक छोटा साथी',

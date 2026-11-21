@@ -1384,3 +1384,42 @@ body.report-body {
     transition: none !important;
   }
 }
+
+/* ------------------------------------------------------------------
+ * UI polish (inside the app shell). The fixed .report-header was replaced by an in-page heading row
+ * (.report-pagehead); the shell provides navigation. Colours and fonts are unchanged; only the control
+ * height (48px) and corner radius (4px) are made consistent.
+ * ------------------------------------------------------------------ */
+.report-pagehead {
+  align-items: center;
+}
+
+.report-title {
+  margin: 0;
+  color: #111;
+  font: 600 22px/1.1 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.report-pagehead .report-header-tools {
+  margin-left: auto;
+}
+
+.report-page .send-report-button,
+.report-page .back-to-shop-button,
+.report-page .see-reports-button,
+.report-page .report-link-button,
+.report-page .cancel-report-button,
+.report-page .listen-text-button {
+  min-height: 48px;
+  border-radius: 4px;
+}
+
+.report-page .category-button {
+  border-radius: 4px;
+}
+
+.report-page .record-button {
+  border-radius: 8px;
+}
