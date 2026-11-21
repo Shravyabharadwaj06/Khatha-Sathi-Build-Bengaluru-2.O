@@ -52,7 +52,7 @@ export class ApiError extends Error {
 }
 
 export const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API !== 'false';
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
 
 // ---------------------------------------------------------------------------
 // Real implementation
@@ -68,7 +68,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(body.message ?? `Request failed (${res.status})`, body.field);
+  if (!res.ok) {
+    const detail = typeof body.detail === 'string'
+      ? body.detail
+      : Array.isArray(body.detail)
+        ? body.detail.map((issue: { msg?: string }) => issue.msg).filter(Boolean).join(', ')
+        : undefined;
+    throw new ApiError(
+      body.message ?? detail ?? `Request failed (${res.status})`,
+      body.field ?? res.headers.get('X-Error-Field') ?? undefined,
+    );
+  }
   return body as T;
 }
 

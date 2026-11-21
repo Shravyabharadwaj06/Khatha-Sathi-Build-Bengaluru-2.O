@@ -8,9 +8,14 @@ Requires Node 18 or newer (tested on Node 24, npm 11).
 
 ```bash
 npm install
-cp .env.example .env
-npm run dev          # http://localhost:5173
+npm run dev          # after starting the backend and copying .env.example to .env
 ```
+
+For the connected local app, start the backend from `../backend` with
+`python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000`, then copy
+`.env.example` to `.env`. The frontend runs at http://localhost:5173 and uses
+the SQLite-backed API at http://localhost:8000. Local signup OTP: `123456`.
+Set `VITE_USE_MOCK_API=true` in `.env` to use the in-browser mock instead.
 
 ## Scripts
 
@@ -30,8 +35,8 @@ The first time, install the browser: `npx playwright install chromium`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VITE_USE_MOCK_API` | `true` | `true` uses the in-browser mock. `false` calls the real backend. |
-| `VITE_API_BASE_URL` | `http://localhost:8000/api` | Base URL of the real backend |
+| `VITE_USE_MOCK_API` | `false` (in `.env.example`) | `true` uses the in-browser mock. `false` calls the real backend. |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Base URL of the real backend |
 
 Never commit `.env`. Only `.env.example` is tracked.
 
@@ -85,7 +90,7 @@ Typed functions: `sendOtp`, `verifyOtp`, `signup`, `login`, `logout`, `getCurren
 
 The session is stored under `chotu.session`: in `localStorage` when "Remember counter device" is checked, otherwise in `sessionStorage`. Sign up always uses `localStorage`.
 
-**Backend team:** the REST paths in the `real` object are a proposal: `POST /auth/otp/send`, `POST /auth/otp/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, with Bearer token auth. Errors are `{ message, field? }`. Change them in `api.ts` only.
+The `real` auth implementation uses `POST /auth/otp/send`, `POST /auth/otp/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`, with Bearer token auth. Backend validation errors are displayed from FastAPI's `detail` response.
 
 ## Visual comparison
 
