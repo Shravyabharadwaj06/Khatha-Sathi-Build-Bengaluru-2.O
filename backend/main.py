@@ -1,5 +1,7 @@
 import base64
 import binascii
+import csv
+import io
 import json
 import logging
 import os
@@ -13,7 +15,11 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import StreamingResponse
+from openpyxl import Workbook
 from pydantic import BaseModel
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -2001,7 +2007,6 @@ def sales_report(
                original.amount_paise as referenced_amount_paise,
                original.paid_paise as referenced_paid_paise
           from public.ledger_entries entry
-          left join public.ledger_entries original
             on original.id = entry.ref_entry_id and original.shop_id = entry.shop_id
          where entry.shop_id = :shop_id
         """,
@@ -2208,124 +2213,446 @@ def parse_date(value):
     raise HTTPException(status_code=422, detail="Date must use YYYY-MM-DD format.")
 
 
-# ---------------------------------------------------------------------------
-# Voice assistant (docs/VOICE_CONTRACT.md): /voice/command, choose, confirm, cancel, undo, speak, usage.
-# It writes only through the same helpers as the endpoints above.
-# ---------------------------------------------------------------------------
-install_voice_errors(app)
-voice_router = create_voice_router(
-    auth=current_auth_context,
-    db=get_db,
-    ledger=VoiceLedger(
-        record_sale=_record_sale,
-        record_payment=_create_payment_entry,
-        record_reversal=_record_reversal,
-        record_product=_record_product,
-        set_actor=_set_actor,
-    ),
-)
-app.include_router(voice_router)
+def _quick_start_end(period: str, start: Optional[str] = None, end: Optional[str] = None):
+    now = datetime.now(timezone.utc)
+    period = (period or "week").strip().lower()
 
-@app.get("/quick-update")
-def get_quick_update(
+    if period == "custom":
+        if not start or not end:
+            raise HTTPException(status_code=422, detail="start and end are required for custom period")
+        try:
+            start_dt = datetime.combine(date.fromisoformat(start), datetime.min.time(), tzinfo=timezone.utc)
+            end_dt = datetime.combine(date.fromisoformat(end), datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="start and end must use YYYY-MM-DD")
+        if end_dt <= start_dt:
+            raise HTTPException(status_code=422, detail="end must be on or after start")
+        return start_dt, end_dt
+
+    if period == "today":
+        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "yesterday":
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_dt = today - timedelta(days=1)
+        return start_dt, today
+    elif period == "month":
+        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == "week":
+        start_dt = now - timedelta(days=7)
+    else:
+        raise HTTPException(status_code=422, detail="period must be today, yesterday, week, month, or custom")
+    return start_dt, now
+
+
+def _quick_entry_rows(
+    db: Session,
+    shop_id: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    transaction_type: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    clauses = [
+        "e.shop_id = :shop_id",
+        "e.created_at >= :start_at",
+        "e.created_at < :end_at",
+    ]
+    values = {"shop_id": shop_id, "start_at": start_dt, "end_at": end_dt}
+
+    if transaction_type:
+        transaction_type = transaction_type.strip().lower()
+        if transaction_type not in {"sale", "payment", "reversal", "udhaar"}:
+            raise HTTPException(status_code=422, detail="Invalid transaction type")
+        if transaction_type == "udhaar":
+            clauses.append("e.type = 'sale' and e.due_delta_paise > 0")
+        else:
+            clauses.append("e.type = :transaction_type")
+            values["transaction_type"] = transaction_type
+
+    if payment_method:
+        payment_method = payment_method.strip().lower()
+        if payment_method not in {"cash", "upi", "udhaar", "credit"}:
+            raise HTTPException(status_code=422, detail="Invalid payment method")
+        clauses.append("e.payment_mode = :payment_method")
+        values["payment_method"] = "udhaar" if payment_method == "credit" else payment_method
+
+    if search:
+        term = search.strip().lower()
+        clauses.append("(lower(coalesce(c.name, 'walk-in')) like :search or cast(e.id as text) like :search)")
+        values["search"] = f"%{term}%"
+
+    query = f"""
+        select e.id, e.customer_id, e.type, e.amount_paise, e.paid_paise,
+               e.due_delta_paise, e.payment_mode, e.note, e.created_at,
+               c.name as customer_name, c.phone as customer_phone
+          from public.ledger_entries e
+          left join public.customers c
+            on c.id = e.customer_id and c.shop_id = e.shop_id
+         where {' and '.join(clauses)}
+         order by e.created_at desc, e.id desc
+    """
+    rows = _all(db, query, values)
+    return [
+        {
+            **_entry_dict(row),
+            "customer_name": row.get("customer_name") or "Walk-in Counter",
+            "customer_phone": row.get("customer_phone"),
+        }
+        for row in rows
+    ]
+
+
+@app.get("/quick-view/transactions")
+def filtered_quick_transactions(
+    period: str = "week",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    transaction_type: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    start_dt, end_dt = _quick_start_end(period, start, end)
+    limit = max(1, min(limit, 500))
+    rows = _quick_entry_rows(db, context.shop_id, start_dt, end_dt, transaction_type, payment_method, search)
+
+    sales = [row for row in rows if row["transaction_type"] == "sale"]
+    payments = [row for row in rows if row["transaction_type"] == "payment"]
+    udhaar = [row for row in sales if float(row["due_delta"] or 0) > 0]
+
+    total_sales_paise = sum(int(row["amount_paise"]) for row in sales if False) if False else None
+
+    return {
+        "period": {"period": period, "start": _iso(start_dt), "end": _iso(end_dt)},
+        "filters": {
+            "transaction_type": transaction_type,
+            "payment_method": payment_method,
+            "search": search,
+        },
+        "summary": {
+            "record_count": len(rows),
+            "total_sales": sum(float(row["total_amount"] or 0) for row in sales),
+            "cash_received": sum(float(row["paid_amount"] or 0) for row in rows if row["payment_method"] == "cash"),
+            "upi_received": sum(float(row["paid_amount"] or 0) for row in rows if row["payment_method"] == "upi"),
+            "udhaar_given": sum(max(float(row["due_delta"] or 0), 0) for row in udhaar),
+            "udhaar_collected": sum(float(row["paid_amount"] or 0) for row in payments),
+        },
+        "transactions": rows[:limit],
+    }
+
+
+@app.get("/quick-view/who-owes")
+def who_owes_me(
+    sort: str = "balance",
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    sort = sort.strip().lower()
+    if sort not in {"balance", "overdue", "name"}:
+        raise HTTPException(status_code=422, detail="sort must be balance, overdue, or name")
+
+    customers = _all(
+        db,
+        """
+        select c.id, c.name, c.phone, c.whatsapp, c.credit_score,
+               coalesce(b.balance_paise, 0) as balance_paise
+          from public.customers c
+          left join public.customer_balances b
+            on b.shop_id = c.shop_id and b.customer_id = c.id
+         where c.shop_id = :shop_id and c.archived_at is null
+        """,
+        {"shop_id": context.shop_id},
+    )
+
+    result = []
+    now = datetime.now(timezone.utc)
+    for customer in customers:
+        balance = int(customer["balance_paise"] or 0)
+        if balance <= 0:
+            continue
+
+        entries = _all(
+            db,
+            """
+            select created_at, due_delta_paise
+              from public.ledger_entries
+             where shop_id = :shop_id and customer_id = :customer_id
+               and due_delta_paise > 0
+             order by created_at asc
+             limit 1
+            """,
+            {"shop_id": context.shop_id, "customer_id": str(customer["id"])},
+        )
+        oldest = entries[0]["created_at"] if entries else now
+        if oldest.tzinfo is None:
+            oldest = oldest.replace(tzinfo=timezone.utc)
+        overdue_days = max((now.date() - oldest.date()).days, 0)
+
+        result.append({
+            "id": str(customer["id"]),
+            "name": customer["name"],
+            "phone_number": customer["phone"],
+            "whatsapp_number": customer["whatsapp"],
+            "credit_score": float(customer["credit_score"] or 0),
+            "outstanding_balance": _rupees(balance),
+            "balance_paise": balance,
+            "overdue_days": overdue_days,
+        })
+
+    if sort == "balance":
+        result.sort(key=lambda row: row["balance_paise"], reverse=True)
+    elif sort == "overdue":
+        result.sort(key=lambda row: row["overdue_days"], reverse=True)
+    else:
+        result.sort(key=lambda row: row["name"].lower())
+
+    total_paise = sum(row["balance_paise"] for row in result)
+    return {
+        "total_pending": _rupees(total_paise),
+        "customer_count": len(result),
+        "customers": result,
+    }
+
+
+@app.get("/quick-view/period-comparison")
+def quick_period_comparison(
     period: str = "week",
     context: AuthContext = Depends(current_auth_context),
     db: Session = Depends(get_db),
 ):
-    """Read-only metrics for the Stitch Quick Update / dashboard screen."""
-    period = period.strip().lower()
-    if period not in {"today", "yesterday", "week", "month", "custom"}:
-        raise HTTPException(status_code=422, detail="period must be today, yesterday, week, month, or custom")
+    current_start, current_end = _quick_start_end(period)
+    duration = current_end - current_start
+    previous_start = current_start - duration
+    previous_end = current_start
 
-    now = datetime.now(timezone.utc)
-    if period == "today":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "yesterday":
-        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start = today - timedelta(days=1)
-        end = today
-    elif period == "month":
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    else:
-        start = now - timedelta(days=7)
+    def totals(start_dt: datetime, end_dt: datetime):
+        rows = _all(
+            db,
+            """
+            select type, amount_paise, paid_paise, due_delta_paise
+              from public.ledger_entries
+             where shop_id = :shop_id
+               and created_at >= :start_at and created_at < :end_at
+               and type != 'reversal'
+            """,
+            {"shop_id": context.shop_id, "start_at": start_dt, "end_at": end_dt},
+        )
+        sales = sum(int(row["amount_paise"] or 0) for row in rows if row["type"] == "sale")
+        collected = sum(int(row["amount_paise"] or 0) for row in rows if row["type"] == "payment")
+        udhaar = sum(max(int(row["due_delta_paise"] or 0), 0) for row in rows if row["type"] == "sale")
+        return sales, collected, udhaar
 
-    end = locals().get("end", now)
+    current = totals(current_start, current_end)
+    previous = totals(previous_start, previous_end)
+
+    def change(current_value: int, previous_value: int):
+        if previous_value == 0:
+            return None
+        return round(((current_value - previous_value) / previous_value) * 100, 1)
+
+    return {
+        "period": period,
+        "current": {
+            "sales": _rupees(current[0]),
+            "collected": _rupees(current[1]),
+            "udhaar_given": _rupees(current[2]),
+        },
+        "previous": {
+            "sales": _rupees(previous[0]),
+            "collected": _rupees(previous[1]),
+            "udhaar_given": _rupees(previous[2]),
+        },
+        "change_percent": {
+            "sales": change(current[0], previous[0]),
+            "collected": change(current[1], previous[1]),
+            "udhaar_given": change(current[2], previous[2]),
+        },
+    }
+
+
+@app.get("/quick-view/products")
+def quick_product_report(
+    period: str = "week",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    start_dt, end_dt = _quick_start_end(period, start, end)
+    rows = _all(
+        db,
+        """
+        select li.product_id, li.product_name_snapshot, li.qty,
+               li.line_total_paise
+          from public.ledger_items li
+          join public.ledger_entries e
+            on e.id = li.entry_id and e.shop_id = li.shop_id
+         where li.shop_id = :shop_id
+           and e.type = 'sale'
+           and e.created_at >= :start_at and e.created_at < :end_at
+        """,
+        {"shop_id": context.shop_id, "start_at": start_dt, "end_at": end_dt},
+    )
+
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        key = str(row["product_id"] or row["product_name_snapshot"])
+        item = grouped.setdefault(key, {
+            "product_id": str(row["product_id"]) if row["product_id"] else None,
+            "name": row["product_name_snapshot"],
+            "quantity": 0,
+            "sales_paise": 0,
+        })
+        item["quantity"] += float(row["qty"] or 0)
+        item["sales_paise"] += int(row["line_total_paise"] or 0)
+
+    products = sorted(grouped.values(), key=lambda row: row["sales_paise"], reverse=True)
+    top = [{**row, "quantity": float(row["quantity"]), "sales": _rupees(row["sales_paise"])} for row in products[:10]]
+    slow = [{**row, "quantity": float(row["quantity"]), "sales": _rupees(row["sales_paise"])} for row in reversed(products[-10:])]
+    return {"period": {"start": _iso(start_dt), "end": _iso(end_dt)}, "top_sellers": top, "slow_moving": slow}
+
+
+@app.get("/customers/{customer_id}/ledger-running")
+def customer_ledger_running(
+    customer_id: uuid.UUID,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    identifier = str(customer_id)
+    customer = _customer_row(db, context.shop_id, identifier)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
 
     rows = _all(
         db,
         """
-        select id, customer_id, type, amount_paise, paid_paise,
-               due_delta_paise, payment_mode, created_at
+        select id, type, amount_paise, paid_paise, due_delta_paise,
+               payment_mode, note, created_at
           from public.ledger_entries
-         where shop_id = :shop_id
-           and created_at >= :start_at
-           and created_at < :end_at
-         order by created_at desc, id desc
+         where shop_id = :shop_id and customer_id = :customer_id
+         order by created_at asc, id asc
         """,
-        {"shop_id": context.shop_id, "start_at": start, "end_at": end},
+        {"shop_id": context.shop_id, "customer_id": identifier},
     )
 
-    active_entries = [row for row in rows if row["type"] != "reversal"]
-    sale_entries = [row for row in active_entries if row["type"] == "sale"]
-    payment_entries = [row for row in active_entries if row["type"] == "payment"]
-
-    total_sales_paise = sum(int(row["amount_paise"] or 0) for row in sale_entries)
-    cash_paise = sum(
-        int(row["paid_paise"] or 0)
-        for row in active_entries
-        if row["payment_mode"] == "cash"
-    )
-    upi_paise = sum(
-        int(row["paid_paise"] or 0)
-        for row in active_entries
-        if row["payment_mode"] == "upi"
-    )
-    udhaar_paise = sum(
-        int(row["due_delta_paise"] or 0)
-        for row in sale_entries
-        if int(row["due_delta_paise"] or 0) > 0
-    )
-    udhaar_customer_ids = {
-        str(row["customer_id"])
-        for row in sale_entries
-        if row["customer_id"] and int(row["due_delta_paise"] or 0) > 0
-    }
-
-    collected_paise = sum(int(row["amount_paise"] or 0) for row in payment_entries)
-
-    balances = _all(
-        db,
-        """
-        select balance_paise
-          from public.customer_balances
-         where shop_id = :shop_id
-        """,
-        {"shop_id": context.shop_id},
-    )
-    total_outstanding_paise = sum(max(int(row["balance_paise"] or 0), 0) for row in balances)
-
-    recent = []
-    for row in active_entries[:10]:
-        recent.append({
+    running_paise = 0
+    entries = []
+    for row in rows:
+        running_paise += int(row["due_delta_paise"] or 0)
+        entries.append({
             "id": str(row["id"]),
-            "customer_id": str(row["customer_id"]) if row["customer_id"] else None,
             "type": row["type"],
             "amount": _rupees(row["amount_paise"]),
             "paid_amount": _rupees(row["paid_paise"]),
+            "due_delta": _rupees(row["due_delta_paise"]),
             "payment_method": row["payment_mode"],
-            "transaction_date": _iso(row["created_at"]),
-            "status": "paid" if int(row["paid_paise"] or 0) >= int(row["amount_paise"] or 0) else "partial",
+            "note": row["note"],
+            "created_at": _iso(row["created_at"]),
+            "running_balance": _rupees(running_paise),
+            "running_balance_paise": running_paise,
         })
 
+    entries.reverse()
     return {
-        "period": period,
-        "total_sales": _rupees(total_sales_paise),
-        "bill_count": len(sale_entries),
-        "cash_box": _rupees(cash_paise),
-        "upi_received": _rupees(upi_paise),
-        "udhaar_given": _rupees(udhaar_paise),
-        "udhaar_customer_count": len(udhaar_customer_ids),
-        "collected_this_period": _rupees(collected_paise),
-        "total_outstanding": _rupees(total_outstanding_paise),
-        "recent_transactions": recent,
+        "customer": _customer_dict(customer),
+        "outstanding_balance": _rupees(running_paise),
+        "entries": entries,
     }
+
+
+@app.get("/quick-view/export/preview")
+def quick_export_preview(
+    period: str = "week",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    start_dt, end_dt = _quick_start_end(period, start, end)
+    rows = _quick_entry_rows(db, context.shop_id, start_dt, end_dt)
+    total_paise = sum(int(_paise(row["total_amount"], "total") or 0) for row in rows)
+    return {
+        "period": {"start": _iso(start_dt), "end": _iso(end_dt)},
+        "record_count": len(rows),
+        "total": _rupees(total_paise),
+        "formats": ["CSV", "Excel", "PDF"],
+    }
+
+
+@app.get("/quick-view/export")
+def quick_export(
+    format: str = "csv",
+    period: str = "week",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    export_format = format.strip().lower()
+    if export_format not in {"csv", "excel", "xlsx", "pdf"}:
+        raise HTTPException(status_code=422, detail="format must be csv, excel, xlsx, or pdf")
+
+    start_dt, end_dt = _quick_start_end(period, start, end)
+    rows = _quick_entry_rows(db, context.shop_id, start_dt, end_dt)
+
+    if export_format == "csv":
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["Date", "Customer", "Phone", "Type", "Amount", "Paid", "Payment", "Status"])
+        for row in rows:
+            writer.writerow([
+                row["transaction_date"], row["customer_name"], row["customer_phone"] or "",
+                row["transaction_type"], row["total_amount"], row["paid_amount"],
+                row["payment_method"] or "", row["status"],
+            ])
+        content = buffer.getvalue().encode("utf-8-sig")
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=quick-view-report.csv"},
+        )
+
+    if export_format in {"excel", "xlsx"}:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Transactions"
+        sheet.append(["Date", "Customer", "Phone", "Type", "Amount", "Paid", "Payment", "Status"])
+        for row in rows:
+            sheet.append([
+                row["transaction_date"], row["customer_name"], row["customer_phone"] or "",
+                row["transaction_type"], row["total_amount"], row["paid_amount"],
+                row["payment_method"] or "", row["status"],
+            ])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=quick-view-report.xlsx"},
+        )
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf.setTitle("Quick View Report")
+    pdf.drawString(40, 800, "Quick View Report")
+    y = 770
+    pdf.drawString(40, y, f"Records: {len(rows)}")
+    y -= 20
+    for row in rows[:50]:
+        line = f"{row['transaction_date']} | {row['customer_name']} | {row['transaction_type']} | {row['total_amount']}"
+        pdf.drawString(40, y, line[:110])
+        y -= 16
+        if y < 40:
+            pdf.showPage()
+            y = 800
+    pdf.save()
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=quick-view-report.pdf"},
+    )

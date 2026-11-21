@@ -12,6 +12,7 @@ import MyReports from './pages/MyReports';
 import Products from './pages/Products';
 import Customers from './pages/Customers';
 import Assistant from './pages/Assistant';
+import QuickView from './pages/QuickView';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import AppShell from './components/shell/AppShell';
 import { logout } from './services/api';
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/report-issue" element={<ReportIssue />} />
           <Route path="/report-sent" element={<ReportSent />} />
           <Route path="/reports" element={<MyReports />} />
+          <Route path="/quick-view" element={<QuickView />} />
         </Route>
 
         <Route path="/terms" element={<Legal kind="terms" />} />
