@@ -188,18 +188,12 @@ export default function ReportIssue() {
 
   return (
     <div className="report-page">
-      <header className="report-header">
-        <button className="report-back" type="button" aria-label="Back to shop" onClick={() => navigate('/home')}>
-          <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-        </button>
-        <h1>Voice Counter</h1>
+      <div className="cs-pagehead report-pagehead">
+        <h1 className="report-title">Voice Counter</h1>
         <div className="report-header-tools">
           <span className="report-language">EN / HI</span>
-          <button className="report-profile" type="button" aria-label="My profile" onClick={() => navigate('/profile')}>
-            <span className="material-symbols-outlined" aria-hidden="true">person</span>
-          </button>
         </div>
-      </header>
+      </div>
 
       <main className="report-main">
         <section className="screen-listen" aria-label="Screen instructions">
