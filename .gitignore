@@ -13,3 +13,12 @@ playwright/.cache/
 Thumbs.db
 reference/
 *.pdf
+
+# Python backend
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/khatha.db
+backend/*.db
