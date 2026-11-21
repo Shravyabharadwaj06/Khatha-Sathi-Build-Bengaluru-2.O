@@ -20,6 +20,9 @@ from sqlalchemy.orm import Session
 
 import reminders
 from database import get_db
+from voice import parser as voice_parser
+from voice.router import create_voice_router, install_voice_errors
+from voice.store import Ledger as VoiceLedger
 from schemas import (
     CustomerCreate,
     CustomerUpdate,
@@ -2100,28 +2103,23 @@ def global_search(
     }
 
 
+_LEGACY_INTENTS = {
+    "CREATE_BILL": ("sale", "Sale request recognized."),
+    "ADD_ITEM": ("sale", "Sale request recognized."),
+    "RECORD_PAYMENT": ("payment", "Payment request recognized."),
+    "ADD_PRODUCT": ("add_product", "Product creation request recognized."),
+}
+
+
 @app.post("/voice/process")
 def process_voice(payload: VoiceCommandInput):
+    """Legacy endpoint kept for old clients: a thin alias of the voice parser (intent only, nothing saved).
+    The assistant screen uses POST /voice/command (docs/VOICE_CONTRACT.md)."""
     spoken = payload.text.strip()
-    normalized = spoken.lower()
-    if "add product" in normalized or "create product" in normalized:
-        intent = "add_product"
-        message = "Product creation request recognized."
-    elif "add customer" in normalized or "create customer" in normalized:
-        intent = "add_customer"
-        message = "Customer creation request recognized."
-    elif "payment" in normalized or "received" in normalized:
-        intent = "payment"
-        message = "Payment request recognized."
-    elif "sold" in normalized or "sale" in normalized:
-        intent = "sale"
-        message = "Sale request recognized."
-    elif "purchase" in normalized or "stock in" in normalized:
-        intent = "purchase"
-        message = "Purchase request recognized."
-    else:
-        intent = "unknown"
-        message = "Command could not be understood. Please say add product, sale, purchase, or payment."
+    intent, message = _LEGACY_INTENTS.get(
+        voice_parser.detect_intent(spoken),
+        ("unknown", "Command could not be understood. Please use the AI assistant."),
+    )
     return {
         "recognized_text": spoken,
         "intent": intent,
@@ -2207,3 +2205,22 @@ def parse_date(value):
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Date must use YYYY-MM-DD format.") from error
     raise HTTPException(status_code=422, detail="Date must use YYYY-MM-DD format.")
+
+
+# ---------------------------------------------------------------------------
+# Voice assistant (docs/VOICE_CONTRACT.md): /voice/command, choose, confirm, cancel, undo, speak, usage.
+# It writes only through the same helpers as the endpoints above.
+# ---------------------------------------------------------------------------
+install_voice_errors(app)
+voice_router = create_voice_router(
+    auth=current_auth_context,
+    db=get_db,
+    ledger=VoiceLedger(
+        record_sale=_record_sale,
+        record_payment=_create_payment_entry,
+        record_reversal=_record_reversal,
+        record_product=_record_product,
+        set_actor=_set_actor,
+    ),
+)
+app.include_router(voice_router)
