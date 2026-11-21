@@ -56,10 +56,14 @@ def test_customer_create_update_delete():
 
 
 def test_signup_login_me_logout():
+    import uuid
+
+    email = f"shop-{uuid.uuid4().hex}@example.com"
+    phone = str(uuid.uuid4().int)[-10:]
     signup = client.post("/auth/signup", json={
-        "email": "shop@example.com",
+        "email": email,
         "name": "Demo Shop",
-        "phone": "9876543210",
+        "phone": phone,
         "password": "123456",
         "city": "Bengaluru",
         "businessDomain": "Grocery",
@@ -69,7 +73,69 @@ def test_signup_login_me_logout():
 
     me = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
-    assert me.json()["email"] == "shop@example.com"
+    assert me.json()["email"] == email
 
     logout = client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
     assert logout.status_code == 200
+
+
+def test_sale_purchase_payment_and_delete():
+    product = client.post("/products", json={
+        "name": "Sugar",
+        "selling_price": 50,
+        "purchase_price": 40,
+        "stock_quantity": 10,
+        "low_stock_threshold": 2,
+    }).json()
+
+    customer = client.post("/customers", json={
+        "name": "Ledger Customer",
+        "phone_number": "9000000001",
+        "credit_score": 70,
+    }).json()
+
+    sale = client.post("/transactions", json={
+        "transaction_type": "sale",
+        "customer_id": customer["id"],
+        "items": [{"product_id": product["id"], "quantity": 3}],
+        "payment_method": "cash",
+        "paid_amount": 100,
+    })
+    assert sale.status_code == 200
+    assert sale.json()["transaction"]["total_amount"] == 150
+
+    sugar = next(item for item in client.get("/products").json() if item["id"] == product["id"])
+    assert sugar["stock_quantity"] == 7
+
+    ledger = client.get(f"/customers/{customer['id']}/ledger")
+    assert ledger.status_code == 200
+    assert ledger.json()["outstanding_balance"] == 50
+
+    payment = client.post("/payments", json={
+        "customer_id": customer["id"],
+        "amount": 50,
+        "payment_method": "upi",
+    })
+    assert payment.status_code == 200
+    assert payment.json()["outstanding_balance"] == 0
+
+    purchase = client.post("/transactions", json={
+        "transaction_type": "purchase",
+        "items": [{"product_id": product["id"], "quantity": 5}],
+        "payment_method": "cash",
+    })
+    assert purchase.status_code == 200
+
+    sugar = next(item for item in client.get("/products").json() if item["id"] == product["id"])
+    assert sugar["stock_quantity"] == 12
+
+
+def test_reports_search_and_voice():
+    assert client.get("/dashboard").status_code == 200
+    assert client.get("/reports/sales").status_code == 200
+    assert client.get("/reports/stock").status_code == 200
+    assert client.get("/search", params={"q": "Sugar"}).status_code == 200
+
+    voice = client.post("/voice/process", json={"text": "I sold 2 kg sugar"})
+    assert voice.status_code == 200
+    assert voice.json()["intent"] == "sale"

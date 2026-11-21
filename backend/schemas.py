@@ -48,3 +48,28 @@ class CustomerUpdate(BaseModel):
     whatsapp_number: Optional[str] = None
     outstanding_balance: Optional[float] = Field(default=None, ge=0)
     credit_score: Optional[float] = Field(default=None, ge=0)
+
+
+class TransactionItemInput(BaseModel):
+    product_id: int
+    quantity: float = Field(gt=0)
+
+
+class TransactionCreate(BaseModel):
+    transaction_type: str
+    customer_id: Optional[int] = None
+    items: list[TransactionItemInput]
+    payment_method: str = "cash"
+    paid_amount: Optional[float] = Field(default=None, ge=0)
+    notes: Optional[str] = None
+
+
+class PaymentCreate(BaseModel):
+    customer_id: int
+    amount: float = Field(gt=0)
+    payment_method: str = "cash"
+    notes: Optional[str] = None
+
+
+class VoiceCommandInput(BaseModel):
+    text: str = Field(min_length=1)
