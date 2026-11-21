@@ -18,10 +18,19 @@ class SupabaseRequestError(Exception):
         self.status_code = status_code
 
 
+def is_placeholder(value: str) -> bool:
+    """True for the `<...>` placeholders copied from backend/.env.example (e.g. https://<project-ref>.supabase.co)."""
+    return "<" in value and ">" in value
+
+
 def _setting(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
         raise SupabaseNotConfigured(f"{name} is not configured in backend/.env.")
+    if is_placeholder(value):
+        raise SupabaseNotConfigured(
+            f"{name} in backend/.env still has the placeholder from .env.example; paste the real value."
+        )
     return value
 
 

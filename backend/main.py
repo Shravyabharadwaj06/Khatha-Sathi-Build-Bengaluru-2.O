@@ -41,6 +41,7 @@ from supabase_client import (
     create_auth_user,
     create_signed_storage_url,
     delete_auth_user,
+    is_placeholder,
     delete_storage_objects,
     refresh_auth_session,
     sign_in_with_password,
@@ -59,6 +60,25 @@ def _cors_origins() -> list[str]:
         return ["http://localhost:5173", "http://127.0.0.1:5173"]
     return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
 
+
+def config_problems() -> list[str]:
+    """Names (never values) of required backend/.env settings that are empty or still placeholders."""
+    problems = []
+    for name in ("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SERVICE_ROLE_KEY", "DATABASE_URL"):
+        value = os.environ.get(name, "").strip()
+        if not value:
+            problems.append(f"{name} is empty")
+        elif is_placeholder(value):
+            problems.append(f"{name} still has the .env.example placeholder")
+    if os.environ.get("OTP_MODE", "").strip().lower() == "dev" and not re.fullmatch(
+        r"\d{6}", os.environ.get("DEV_OTP_CODE", "").strip()
+    ):
+        problems.append("DEV_OTP_CODE must be six digits when OTP_MODE=dev")
+    return problems
+
+
+for _problem in config_problems():
+    logger.warning("backend/.env: %s", _problem)
 
 app = FastAPI(title="Khatha Sathi API")
 app.add_middleware(

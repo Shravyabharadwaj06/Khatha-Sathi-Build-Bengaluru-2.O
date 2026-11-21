@@ -181,8 +181,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-/** Authenticated JSON request to any backend path (used by the Products / Customers pages). */
-export const apiRequest = <T,>(path: string, init: RequestInit = {}): Promise<T> => request<T>(path, init);
+/**
+ * Authenticated JSON request to any backend path (used by the Products / Customers pages).
+ * These pages have no in-browser mock: in mock mode they say so instead of sending a fake token to the backend.
+ */
+export const apiRequest = <T,>(path: string, init: RequestInit = {}): Promise<T> =>
+  USE_MOCK_API
+    ? Promise.reject(new ApiError('This page needs the backend. Set VITE_USE_MOCK_API=false in frontend/.env and start the backend.', undefined, 'MOCK_MODE'))
+    : request<T>(path, init);
 
 const real = {
   sendOtp: (phone: string) => request<{ sent: true }>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ phone }) }),

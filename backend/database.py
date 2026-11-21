@@ -14,7 +14,13 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DATABASE_CONFIG_ERROR = ""
 engine = None
-if DATABASE_URL:
+if "<" in DATABASE_URL and ">" in DATABASE_URL:
+    # Still the template from .env.example (e.g. postgres.<project-ref>:<password>@aws-<N>-...).
+    DATABASE_CONFIG_ERROR = (
+        "DATABASE_URL in backend/.env still has the placeholders from .env.example "
+        "(<project-ref>, <password>, <N>); paste the Session pooler URL from Supabase."
+    )
+elif DATABASE_URL:
     try:
         parsed_url = make_url(DATABASE_URL)
     except ArgumentError:

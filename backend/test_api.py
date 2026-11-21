@@ -21,6 +21,59 @@ def test_database_routes_fail_closed_when_not_configured(monkeypatch):
     assert "DATABASE_URL" in response.json()["detail"]
 
 
+def test_placeholder_env_values_are_reported_by_name(monkeypatch):
+    # backend/.env copied from .env.example without filling it in (the "database not working" root cause).
+    monkeypatch.setenv("SUPABASE_URL", "https://<project-ref>.supabase.co")
+    monkeypatch.setenv("SUPABASE_PUBLISHABLE_KEY", "<sb_publishable_...>")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://postgres.<project-ref>:<password>@aws-<N>-x.pooler.supabase.com:5432/postgres")
+    monkeypatch.setenv("OTP_MODE", "dev")
+    monkeypatch.setenv("DEV_OTP_CODE", "<six-digit-code>")
+    problems = main.config_problems()
+    assert "SUPABASE_URL still has the .env.example placeholder" in problems
+    assert "SUPABASE_PUBLISHABLE_KEY still has the .env.example placeholder" in problems
+    assert "SUPABASE_SERVICE_ROLE_KEY is empty" in problems
+    assert "DATABASE_URL still has the .env.example placeholder" in problems
+    assert "DEV_OTP_CODE must be six digits when OTP_MODE=dev" in problems
+
+    # Email login reaches Supabase Auth first: a placeholder key is a clear 503, not a generic 502.
+    class _NoDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(database, "SessionLocal", _NoDb)
+    response = client.post("/auth/login", json={"method": "email", "identifier": "a@b.co", "password": "x"})
+    assert response.status_code == 503
+    assert "SUPABASE_PUBLISHABLE_KEY" in response.json()["detail"]
+    assert "placeholder" in response.json()["detail"]
+
+
+def test_placeholder_database_url_fails_closed_with_a_clear_message(monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://postgres.<project-ref>:<password>@aws-<N>-x.pooler.supabase.com:5432/postgres")
+    try:
+        importlib.reload(database)
+        assert database.SessionLocal is None
+        assert "placeholders" in database.DATABASE_CONFIG_ERROR
+        response = client.get("/health/ready")
+        assert response.status_code == 503
+        assert "placeholders" in response.json()["detail"]
+    finally:
+        monkeypatch.delenv("DATABASE_URL")
+        importlib.reload(database)
+
+
+def test_real_looking_values_are_not_flagged(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://abcdefghijklmnop.supabase.co")
+    monkeypatch.setenv("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_example")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_example")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://postgres.abc:pw@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres")
+    monkeypatch.setenv("OTP_MODE", "dev")
+    monkeypatch.setenv("DEV_OTP_CODE", "123456")
+    assert main.config_problems() == []
+
+
 def test_development_otp_uses_configured_code(monkeypatch):
     monkeypatch.setattr(main, "OTP_MODE", "dev")
     monkeypatch.setattr(main, "DEV_OTP_CODE", "123456")

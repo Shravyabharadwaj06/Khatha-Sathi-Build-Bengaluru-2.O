@@ -16,7 +16,7 @@ export default function Home() {
 
   const open = (label: string, route?: string) => {
     if (route) navigate(route);
-    else showToast(label);
+    else showToast(`${label} is coming soon`);
   };
 
   return (
@@ -29,7 +29,7 @@ export default function Home() {
             <p>Choose a tool to get started.</p>
           </section>
           <div className="cs-pagehead-actions">
-            <button className="top-action" type="button" data-action="Notifications" aria-label="Notifications" onClick={() => showToast('Notifications')}>
+            <button className="top-action" type="button" data-action="Notifications" aria-label="Notifications" onClick={() => showToast('Notifications are coming soon')}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
               </svg>

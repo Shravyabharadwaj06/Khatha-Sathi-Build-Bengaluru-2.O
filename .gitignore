@@ -30,3 +30,6 @@ backend/*.db
 ui-before/
 ui-after/
 ui-compare.html
+
+# Audit evidence (test outputs, API responses, screenshots); summarised in AUDIT_PROGRESS.md
+audit-evidence/
