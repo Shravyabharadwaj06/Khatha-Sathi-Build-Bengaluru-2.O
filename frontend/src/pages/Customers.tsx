@@ -72,6 +72,22 @@ export default function Customers() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openWhatsApp = async (customerId: number) => {
+    try {
+      const res = await fetch(`${API}/customers/${customerId}/whatsapp`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setMessage(body.detail || 'Could not create WhatsApp message');
+        return;
+      }
+
+      const data = await res.json();
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      setMessage('Could not connect to backend for WhatsApp');
+    }
+  };
+
   return (
     <main style={{ maxWidth: 1050, margin: '35px auto', padding: 24, color: '#17243b' }}>
       <button onClick={() => history.back()} style={{ padding: '10px 16px', cursor: 'pointer' }}>← Back</button>
@@ -149,7 +165,8 @@ export default function Customers() {
                 <td style={{ padding: 13 }}>{c.whatsapp_number || '—'}</td>
                 <td style={{ padding: 13 }}>{c.credit_score ?? '—'}</td>
                 <td style={{ padding: 13 }}>
-                  <button onClick={() => edit(c)}>Edit</button>
+                  <button onClick={() => edit(c)}>Edit</button>{' '}
+                  <button onClick={() => openWhatsApp(c.id)}>WhatsApp</button>
                 </td>
               </tr>
             ))}

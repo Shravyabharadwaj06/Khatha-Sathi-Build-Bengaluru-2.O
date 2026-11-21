@@ -2,6 +2,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -568,3 +569,39 @@ def parse_date(value):
     if isinstance(value, str):
         return datetime.strptime(value, "%Y-%m-%d").date()
     return value
+
+@app.get("/whatsapp/chat-link")
+def whatsapp_chat_link(customer_id: int, db: Session = Depends(get_db)):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    phone_number = customer.phone_number or ""
+    whatsapp_number = customer.whatsapp_number or ""
+
+    if not whatsapp_number:
+        raise HTTPException(status_code=400, detail="WhatsApp number is not available for this customer")
+
+    # Create a click-to-chat link for WhatsApp
+    chat_link = f"https://wa.me/{quote(whatsapp_number)}"
+
+    return {"chat_link": chat_link}
+
+@app.get("/customers/{customer_id}/whatsapp")
+def create_whatsapp_link(customer_id: int, db: Session = Depends(get_db)):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    number = "".join(character for character in (customer.whatsapp_number or "") if character.isdigit())
+    if not number:
+        raise HTTPException(status_code=422, detail="Customer has no valid WhatsApp number")
+    if len(number) == 10:
+        number = "91" + number
+
+    message = (
+        f"Hello {customer.name}, your outstanding balance is "
+        f"Rs. {customer.outstanding_balance:.2f}. Thank you."
+    )
+
+    return {"url": f"https://wa.me/{number}?text={quote(message)}"}
