@@ -127,3 +127,31 @@ def test_sending_the_same_balance_back_is_harmless(logged_in, monkeypatch):
     monkeypatch.setattr(main, "_customer_dict", lambda row: {"id": row["id"], "outstanding_balance": 840.0})
     res = client.put(f"/customers/{CUSTOMER_ID}", json={"outstanding_balance": "840.00"})
     assert res.status_code == 200
+
+
+# --- payments larger than the due amount are refused (problem 5) ---------------
+def test_rupee_format_uses_indian_grouping():
+    assert main._format_rupees(84000) == "₹840"
+    assert main._format_rupees(5450) == "₹54.50"
+    assert main._format_rupees(10400000) == "₹1,04,000"
+    assert main._format_rupees(0) == "₹0"
+
+
+class _FakeDb:
+    def __init__(self):
+        self.inserted = False
+
+    def execute(self, *args, **kwargs):  # any INSERT would land here
+        self.inserted = True
+        raise AssertionError("nothing may be written when the payment is refused")
+
+
+def test_payment_more_than_due_is_refused(monkeypatch):
+    monkeypatch.setattr(main, "_one", lambda db, sql, values: {"id": values["customer_id"]})
+    monkeypatch.setattr(main, "_customer_row", lambda db, shop, cid: {"id": cid, "balance_paise": 84000})
+    db = _FakeDb()
+    with pytest.raises(main.HTTPException) as refused:
+        main._create_payment_entry(db, DEMO, CUSTOMER_ID, 90000, "cash", None)
+    assert refused.value.status_code == 422
+    assert refused.value.detail == "Payment is more than the due amount (₹840)."
+    assert not db.inserted

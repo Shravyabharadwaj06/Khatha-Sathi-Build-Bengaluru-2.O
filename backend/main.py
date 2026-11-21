@@ -1301,6 +1301,20 @@ def get_transaction_items(
     return _public_items(db, context.shop_id, identifier)
 
 
+def _format_rupees(paise: int) -> str:
+    """84000 -> '₹840', 5450 -> '₹54.50', with Indian digit grouping (₹1,04,000)."""
+    rupees, rest = divmod(abs(int(paise)), 100)
+    digits = str(rupees)
+    if len(digits) > 3:
+        head, tail = digits[:-3], digits[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        digits = ",".join(([head] if head else []) + groups) + "," + tail
+    return f"{'-' if paise < 0 else ''}₹{digits}" + (f".{rest:02d}" if rest else "")
+
+
 def _create_payment_entry(
     db: Session,
     context: AuthContext,
@@ -1308,15 +1322,29 @@ def _create_payment_entry(
     amount_paise: int,
     payment_method: str,
     note: str | None,
+    *,
+    source: str = "manual",
+    transcript: str | None = None,
 ) -> dict:
+    """The one place that records a payment (used by POST /payments and POST /voice/confirm)."""
     if payment_method not in {"cash", "upi"}:
         raise HTTPException(status_code=422, detail="Payments must use cash or upi.")
-    customer = _customer_row(db, context.shop_id, customer_id)
+    # Lock the customer row so two payments sent at the same moment cannot both pass the check.
+    locked = _one(
+        db,
+        "select id from public.customers where id = :customer_id and shop_id = :shop_id for update",
+        {"customer_id": customer_id, "shop_id": context.shop_id},
+    )
+    customer = _customer_row(db, context.shop_id, customer_id) if locked else None
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found.")
     current_balance = int(customer["balance_paise"] or 0)
     if amount_paise > current_balance:
-        raise HTTPException(status_code=422, detail="Payment cannot exceed outstanding balance.")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Payment is more than the due amount ({_format_rupees(max(current_balance, 0))}).",
+            headers={"X-Error-Field": "amount"},
+        )
 
     _set_actor(db, context.user_id)
     row = db.execute(
@@ -1324,10 +1352,10 @@ def _create_payment_entry(
             """
             insert into public.ledger_entries
                 (shop_id, customer_id, type, amount_paise, paid_paise,
-                 payment_mode, source, note)
+                 payment_mode, source, transcript, note)
             values
                 (:shop_id, :customer_id, 'payment', :amount, :amount,
-                 :payment_method, 'manual', :note)
+                 :payment_method, :source, :transcript, :note)
             returning id, shop_id, customer_id, type, amount_paise, paid_paise,
                       due_delta_paise, payment_mode, note, created_at
             """
@@ -1337,6 +1365,8 @@ def _create_payment_entry(
             "customer_id": customer_id,
             "amount": amount_paise,
             "payment_method": payment_method,
+            "source": source,
+            "transcript": transcript,
             "note": note,
         },
     ).mappings().one()
