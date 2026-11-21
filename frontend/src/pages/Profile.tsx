@@ -6,10 +6,8 @@ import { useToast } from '../hooks/useToast';
 import { AuthToast } from '../components/AuthToast';
 import { getSession, updateSessionUser, clearSession } from '../services/session';
 import { updateProfile, logout } from '../services/api';
-import logo from '../assets/chotu-logo-transparent.png';
 import shopOwnerDefaultImg from '../assets/shop-owner.jpg';
 import { LanguageSelector } from '../components/LanguageSelector';
-import { useI18n } from '../i18n/useI18n';
 
 type Tab =
   | 'shop-profile'
@@ -53,7 +51,6 @@ export default function Profile() {
   const currentUser = session?.user;
 
   const { text: toastText, show: toastShow, showToast } = useToast();
-  const { t } = useI18n();
 
   const [activeTab, setActiveTab] = useState<Tab>('shop-profile');
   const [showLogoutBanner, setShowLogoutBanner] = useState(false);
@@ -237,75 +234,13 @@ export default function Profile() {
         aria-hidden="true"
       />
 
-      <div className="flex min-h-screen flex-col">
-        {/* Top Header */}
-        <header className="fixed top-0 left-0 right-0 h-16 bg-surface/90 backdrop-blur-xl z-40 shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-b border-on-primary-fixed/10">
-          <div className="w-full h-full px-space-md lg:px-space-lg flex items-center justify-between relative">
-            <div className="flex items-center gap-space-md">
-              <Link
-                to="/home"
-                className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-on-primary-fixed/20 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold transition-colors lg:hidden"
-                title="Back to Home Dashboard"
-              >
-                <span className="material-symbols-outlined text-lg" aria-hidden="true">arrow_back</span>
-                <span>{t('nav.home')}</span>
-              </Link>
-              <span className="hidden font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider lg:block">
-                Merchant Terminal
-              </span>
-              <LanguageSelector variant="header" />
-            </div>
-
-            <Link
-              to="/home"
-              aria-label="CHOTU.ai home"
-              className="absolute left-1/2 -translate-x-1/2 flex items-center"
-            >
-              <img src={logo} alt="CHOTU.ai" className="h-8 md:h-9 w-auto object-contain" />
-            </Link>
-
-            {/* Right section: Quick Record & Profile info */}
-            <div className="flex items-center gap-2 sm:gap-space-md">
-              <button
-                className="flex items-center gap-1.5 sm:gap-2 bg-secondary-container text-on-primary-fixed px-2.5 sm:px-3 py-1.5 rounded-lg shadow-[2px_2px_0px_#0F0F56] transition-all hover:bg-secondary-fixed active:translate-y-0.5 font-bold"
-                type="button"
-                onClick={handleVoiceTest}
-              >
-                <span className="material-symbols-outlined text-lg">mic</span>
-                <span className="font-label-md text-label-md uppercase tracking-wider text-xs sm:text-sm">
-                  Quick Record
-                </span>
-              </button>
-              <div className="h-6 w-[1px] bg-surface-container-highest"></div>
-              <button
-                type="button"
-                aria-label={`Profile settings for ${formData.ownerName}`}
-                className="flex items-center gap-2 bg-surface-container-lowest px-2 py-1 rounded-lg border border-on-primary-fixed/10 cursor-pointer hover:bg-surface-container transition-colors"
-                onClick={() => scrollToTab('shop-profile')}
-              >
-                <div className="hidden md:flex flex-col text-right">
-                  <span className="font-label-md text-label-md text-on-surface font-bold leading-tight">
-                    {formData.ownerName}
-                  </span>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    Verified Merchant
-                  </span>
-                </div>
-                <img
-                  alt="Profile"
-                  className="w-8 h-8 rounded-full object-cover border border-primary-container"
-                  src={formData.avatarUrl}
-                />
-              </button>
-            </div>
-          </div>
-        </header>
+      <div className="flex flex-col">
 
         {/* Main Content Page */}
-        <main className="relative pt-16 bg-background flex-1 pb-space-xl">
-          <div className="px-space-md lg:px-space-xl pt-space-lg w-full max-w-[1360px] mx-auto flex flex-col gap-space-lg">
+        <main className="relative bg-background flex-1">
+          <div className="w-full flex flex-col gap-space-lg">
             {/* Page Header / Breadcrumb */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md pb-space-sm border-b border-on-primary-fixed/10">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-space-md pb-space-sm border-b border-on-primary-fixed/10">
               <div className="flex flex-col">
                 <nav className="flex items-center gap-2 mb-1" aria-label="Breadcrumb">
                   <Link
@@ -332,35 +267,73 @@ export default function Profile() {
                 </p>
               </div>
 
-              {/* Quick Voice Status Badge */}
-              <div
-                onClick={handleVoiceTest}
-                className="inline-flex items-center gap-3 bg-surface-container-lowest px-3.5 py-2 rounded-lg border border-on-primary-fixed/15 shadow-[2px_2px_0px_#0F0F56] self-start md:self-auto cursor-pointer hover:bg-surface-container-low active:translate-y-0.5 transition-all"
-                title="Click to test live terminal dialect"
-              >
-                <div className="relative flex items-center justify-center">
-                  <span className="w-3 h-3 rounded-full bg-secondary-container animate-ping absolute"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-secondary-container relative"></span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-                    Live Terminal Voice
+              <div className="flex flex-wrap items-center gap-2 sm:gap-space-md xl:justify-end">
+                {/* Moved from the old top bar (the app shell now provides the logo and navigation) */}
+                <span className="hidden font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider lg:block">
+                  Merchant Terminal
+                </span>
+                <LanguageSelector variant="header" />
+                <button
+                  className="flex items-center gap-1.5 sm:gap-2 bg-secondary-container text-on-primary-fixed px-2.5 sm:px-3 py-1.5 rounded-lg shadow-[2px_2px_0px_#0F0F56] transition-all hover:bg-secondary-fixed active:translate-y-0.5 font-bold"
+                  type="button"
+                  onClick={handleVoiceTest}
+                >
+                  <span className="material-symbols-outlined text-lg">mic</span>
+                  <span className="font-label-md text-label-md uppercase tracking-wider text-xs sm:text-sm">
+                    Quick Record
                   </span>
-                  <span className="font-label-md text-label-md font-bold text-on-primary-fixed flex items-center gap-1">
-                    {formData.primaryLanguage.split(' ')[0]} &amp;{' '}
-                    {formData.secondaryLanguage.split(' ')[0]}
-                    <span className="material-symbols-outlined text-xs text-on-surface-variant">
-                      tune
+                </button>
+                <div className="h-6 w-[1px] bg-surface-container-highest"></div>
+                <button
+                  type="button"
+                  aria-label={`Profile settings for ${formData.ownerName}`}
+                  className="flex items-center gap-2 bg-surface-container-lowest px-2 py-1 rounded-lg border border-on-primary-fixed/10 cursor-pointer hover:bg-surface-container transition-colors"
+                  onClick={() => scrollToTab('shop-profile')}
+                >
+                  <div className="hidden md:flex flex-col text-right">
+                    <span className="font-label-md text-label-md text-on-surface font-bold leading-tight">
+                      {formData.ownerName}
                     </span>
-                  </span>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant">
+                      Verified Merchant
+                    </span>
+                  </div>
+                  <img
+                    alt="Profile"
+                    className="w-8 h-8 rounded-full object-cover border border-primary-container"
+                    src={formData.avatarUrl}
+                  />
+                </button>
+                {/* Quick Voice Status Badge */}
+                <div
+                  onClick={handleVoiceTest}
+                  className="inline-flex items-center gap-3 bg-surface-container-lowest px-3.5 py-2 rounded-lg border border-on-primary-fixed/15 shadow-[2px_2px_0px_#0F0F56] self-start md:self-auto cursor-pointer hover:bg-surface-container-low active:translate-y-0.5 transition-all"
+                  title="Click to test live terminal dialect"
+                >
+                  <div className="relative flex items-center justify-center">
+                    <span className="w-3 h-3 rounded-full bg-secondary-container animate-ping absolute"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-secondary-container relative"></span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+                      Live Terminal Voice
+                    </span>
+                    <span className="font-label-md text-label-md font-bold text-on-primary-fixed flex items-center gap-1">
+                      {formData.primaryLanguage.split(' ')[0]} &amp;{' '}
+                      {formData.secondaryLanguage.split(' ')[0]}
+                      <span className="material-symbols-outlined text-xs text-on-surface-variant">
+                        tune
+                      </span>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Layout Grid: Left Settings Navigation + Right Form Canvas */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-space-lg items-start">
               {/* Left Settings Sidebar */}
-              <aside className="lg:col-span-3 bg-surface-container-lowest rounded-xl border border-on-primary-fixed/15 shadow-sm p-space-md flex flex-col gap-6">
+              <aside className="xl:col-span-3 bg-surface-container-lowest rounded-xl border border-on-primary-fixed/15 shadow-sm p-space-md flex flex-col gap-6">
                 <div>
                   <span className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant px-2 block mb-2 font-bold">
                     Terminal Control
@@ -551,7 +524,7 @@ export default function Profile() {
               </aside>
 
               {/* Right Content Sections */}
-              <section className="lg:col-span-9 flex flex-col gap-space-lg">
+              <section className="xl:col-span-9 flex flex-col gap-space-lg">
                 <div className="bg-surface-container-lowest rounded-xl border border-on-primary-fixed/15 shadow-sm p-space-md lg:p-space-lg flex flex-col gap-8">
                   {/* Section 1: Profile & Shop Identity */}
                   <div
