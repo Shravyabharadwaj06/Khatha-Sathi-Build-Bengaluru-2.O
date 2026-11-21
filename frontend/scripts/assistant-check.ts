@@ -270,9 +270,9 @@ async function run(browser: Browser) {
     await page.waitForURL('**/assistant');
     check('Home "AI assistant" card opens /assistant', new URL(page.url()).pathname === '/assistant');
     await shot(page, '13-desktop-1440');
-    await page.click('[aria-label="Back to home"]');
+    await page.click('.cs-sidebar [data-menu="/home"]'); // the back arrow moved into the app-shell menu
     await page.waitForURL('**/home');
-    const leaked = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-page-style]')).some((s) => (s.textContent ?? '').includes('.va-dock')));
+    const leaked = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-page-style]')).some((s) => (s.textContent ?? '').includes('.va-mic-ring')));
     check('CSS isolation: assistant styles removed after leaving', !leaked);
     await ctx.close();
     const guest = await browser.newContext();

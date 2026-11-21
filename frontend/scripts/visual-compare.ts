@@ -33,11 +33,12 @@ const WIDTHS = [1440, 1024, 768, 390, 360];
 const HEIGHT = 900;
 const FAIL_ABOVE = 0.1; // percent
 
-const PAGES = [
+const PAGES: { name: string; original: string; app: string; session?: boolean }[] = [
   { name: 'landing', original: '/__ref/landing_page.html', app: '/' },
   { name: 'login', original: '/__ref/log_in.html', app: '/login' },
   { name: 'signup', original: '/__ref/sign_up.html', app: '/signup' },
-  { name: 'home', original: '/__ref/home_page_files/home_page.html', app: '/home', session: true },
+  // Home is no longer a pixel copy of the Stitch export: since feature/ui-polish it is the dashboard inside the
+  // app shell (approved). Its behaviour (cards, toasts, focus ring) is checked in scripts/shell-check.ts.
 ];
 
 const TYPES: Record<string, string> = {

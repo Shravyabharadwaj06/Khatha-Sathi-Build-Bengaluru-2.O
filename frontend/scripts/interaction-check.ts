@@ -57,9 +57,6 @@ interface StateCase {
 const click = (sel: string): Step => (p) => p.click(sel);
 const hover = (sel: string): Step => (p) => p.hover(sel);
 const type = (sel: string, text: string): Step => (p) => p.fill(sel, text);
-const press = (key: string, times = 1): Step => async (p) => {
-  for (let i = 0; i < times; i++) await p.keyboard.press(key);
-};
 const select = (sel: string, value: string): Step => async (p) => {
   await p.selectOption(sel, value);
 };
@@ -83,10 +80,9 @@ const STATES: StateCase[] = [
   { name: 'signup-domain-other', width: 1440, original: '/__ref/sign_up.html', app: '/signup', steps: [select('#domain-select', 'Other'), wait(300)] },
   { name: 'signup-domain-other-mobile', width: 390, original: '/__ref/sign_up.html', app: '/signup', steps: [select('#domain-select', 'Other'), wait(300)] },
   { name: 'signup-password-toggles', width: 1440, original: '/__ref/sign_up.html', app: '/signup', steps: [type('#password', 'abcdefgh'), type('#confirm-password', 'abcdefgh'), click('#pwd-toggle-icon'), click('#confirm-pwd-toggle-icon'), wait(300)] },
-  { name: 'home-card-hover', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [hover('.feature:nth-child(2)'), wait(300)] },
-  { name: 'home-card-toast', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [click('.feature:nth-child(1)'), wait(300)] },
-  { name: 'home-toast-gone-1800ms', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [click('.feature:nth-child(1)'), wait(2100)] },
-  { name: 'home-keyboard-focus-ring', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [press('Tab', 3), wait(300)] },
+  // The 4 Home pixel states (card hover, card toast, toast gone after 1.8 s, keyboard focus ring) compared Home with
+  // the Stitch export. Home is now the dashboard inside the app shell, so the same behaviours are checked
+  // without pixels in scripts/shell-check.ts.
 ];
 
 async function capture(browser: Browser, c: StateCase, url: string) {
@@ -146,12 +142,13 @@ async function partB(browser: Browser) {
   };
 
   {
-    // "My Profile" on Home used to show a toast (original Stitch design); since PR #2 it opens /profile.
+    // "My Profile" moved from Home's top bar into the app-shell menu (feature/ui-polish).
     const { ctx, page, errors } = await fresh(360);
     await ctx.addInitScript((s) => localStorage.setItem('chotu.session', s), SESSION);
     await page.goto(BASE + '/home');
-    await page.click('[data-action="My Profile"]');
-    check('Home (360px): "My Profile" navigates to /profile', await at(page, '/profile'));
+    await page.click('[data-testid="menu-button"]');
+    await page.click('#cs-drawer [data-menu="/profile"]');
+    check('Home (360px): menu → Profile navigates to /profile', await at(page, '/profile'));
     allErrors.push(...errors);
     await ctx.close();
   }
