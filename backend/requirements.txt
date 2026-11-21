@@ -1,7 +1,10 @@
 fastapi
 uvicorn[standard]
 sqlalchemy
+psycopg[binary]
 pydantic
+PyJWT[crypto]
+python-dotenv
 python-multipart
 pytest
 httpx

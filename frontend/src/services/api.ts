@@ -8,7 +8,7 @@
  * Backend team: the REST paths/payloads in `real` are a proposal — change them
  * here and nowhere else.
  */
-import { getSession } from './session';
+import { clearSession, getSession, replaceSession } from './session';
 
 export interface User {
   id: string;
@@ -25,6 +25,8 @@ export interface User {
 
 export interface Session {
   token: string;
+  refreshToken?: string;
+  expiresAt?: number;
   user: User;
 }
 
@@ -94,34 +96,84 @@ export class ApiError extends Error {
 export const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API !== 'false';
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
 
+function requestHeaders(init: RequestInit, token?: string): HeadersInit {
+  const isMultipart = init.body instanceof FormData;
+  return {
+    ...(!isMultipart ? { 'Content-Type': 'application/json' } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...init.headers,
+  };
+}
+
+function apiError(res: Response, body: Record<string, unknown>): ApiError {
+  const detail = typeof body.detail === 'string'
+    ? body.detail
+    : Array.isArray(body.detail)
+      ? body.detail.map((issue: { msg?: string }) => issue.msg).filter(Boolean).join(', ')
+      : undefined;
+  return new ApiError(
+    typeof body.message === 'string' ? body.message : detail ?? `Request failed (${res.status})`,
+    typeof body.field === 'string' ? body.field : res.headers.get('X-Error-Field') ?? undefined,
+  );
+}
+
+let refreshInFlight: Promise<Session> | undefined;
+
+async function refreshSession(refreshToken: string): Promise<Session> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        clearSession();
+        throw apiError(res, body);
+      }
+      const session = body as Session;
+      replaceSession(session);
+      return session;
+    })().finally(() => {
+      refreshInFlight = undefined;
+    });
+  }
+  return refreshInFlight;
+}
+
+const noRefreshPaths = new Set([
+  '/auth/login',
+  '/auth/signup',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/otp/send',
+  '/auth/otp/verify',
+]);
+
 // ---------------------------------------------------------------------------
 // Real implementation
 // ---------------------------------------------------------------------------
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getSession()?.token;
-  const isMultipart = init.body instanceof FormData;
-  const res = await fetch(`${BASE_URL}${path}`, {
+  let session = getSession();
+  const send = (token?: string) => fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: {
-      ...(!isMultipart ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
+    headers: requestHeaders(init, token),
   });
+  let res = await send(session?.token);
+  if (res.status === 401 && session?.refreshToken && !noRefreshPaths.has(path)) {
+    session = await refreshSession(session.refreshToken);
+    res = await send(session.token);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = typeof body.detail === 'string'
-      ? body.detail
-      : Array.isArray(body.detail)
-        ? body.detail.map((issue: { msg?: string }) => issue.msg).filter(Boolean).join(', ')
-        : undefined;
-    throw new ApiError(
-      body.message ?? detail ?? `Request failed (${res.status})`,
-      body.field ?? res.headers.get('X-Error-Field') ?? undefined,
-    );
+    if (res.status === 401 && session?.refreshToken) clearSession();
+    throw apiError(res, body);
   }
   return body as T;
 }
+
+export const apiRequest = <T,>(path: string, init: RequestInit = {}): Promise<T> => request<T>(path, init);
 
 const real = {
   sendOtp: (phone: string) => request<{ sent: true }>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ phone }) }),

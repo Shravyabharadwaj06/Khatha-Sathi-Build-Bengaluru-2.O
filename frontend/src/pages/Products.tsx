@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { usePageStyles } from '../hooks/usePageStyles';
+import { apiRequest } from '../services/api';
 import managementCss from '../styles/management-pages.css?raw';
 
-const API = 'http://127.0.0.1:8000';
-
 interface Product {
-  id: number;
+  id: string;
   name: string;
   category: string | null;
-  selling_price: number;
+  selling_price: number | null;
   purchase_price: number | null;
   stock_quantity: number;
   unit: string | null;
@@ -60,7 +59,7 @@ export default function Products() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<ProductForm>(emptyProductForm);
-  const [editing, setEditing] = useState<number | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -68,11 +67,9 @@ export default function Products() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API}/products`);
-      if (!res.ok) throw new Error('Could not load products');
-      setProducts((await res.json()) as Product[]);
-    } catch {
-      setMessage('Could not connect to backend. Make sure FastAPI is running.');
+      setProducts(await apiRequest<Product[]>('/products'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load products.');
     } finally {
       setIsLoading(false);
     }
@@ -102,19 +99,17 @@ export default function Products() {
     };
 
     try {
-      const url = editing === null ? `${API}/products` : `${API}/products/${editing}`;
-      const res = await fetch(url, {
+      const path = editing === null ? '/products' : `/products/${editing}`;
+      await apiRequest<Product>(path, {
         method: editing === null ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error((await res.text()) || 'Unable to save product');
       setMessage(editing === null ? 'Product added successfully!' : 'Product updated successfully!');
       setEditing(null);
       setForm(emptyProductForm());
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to save product');
+      setMessage(error instanceof Error ? error.message : 'Unable to save product.');
     } finally {
       setIsSaving(false);
     }
@@ -240,7 +235,9 @@ export default function Products() {
                     <td data-label="Category">
                       {product.category ? <span className="management-category">{product.category}</span> : '—'}
                     </td>
-                    <td className="management-price" data-label="Selling price">{currency.format(product.selling_price)}</td>
+                    <td className="management-price" data-label="Selling price">
+                      {product.selling_price == null ? '—' : currency.format(product.selling_price)}
+                    </td>
                     <td className="management-price" data-label="Purchase price">
                       {product.purchase_price == null ? '—' : currency.format(product.purchase_price)}
                     </td>

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { usePageStyles } from '../hooks/usePageStyles';
+import { apiRequest } from '../services/api';
 import managementCss from '../styles/management-pages.css?raw';
 
-const API = 'http://127.0.0.1:8000';
-
 interface Customer {
-  id: number;
+  id: string;
   name: string;
   phone_number: string | null;
   whatsapp_number: string | null;
@@ -30,7 +29,7 @@ export default function Customers() {
   usePageStyles({ css: [managementCss], bodyClass: 'management-body', title: 'CHOTU.ai | Customer update' });
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [editing, setEditing] = useState<number | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState<CustomerForm>(emptyCustomerForm);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,11 +38,9 @@ export default function Customers() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API}/customers`);
-      if (!res.ok) throw new Error('Could not load customers');
-      setCustomers((await res.json()) as Customer[]);
-    } catch {
-      setMessage('Could not connect to backend. Make sure FastAPI is running.');
+      setCustomers(await apiRequest<Customer[]>('/customers'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load customers.');
     } finally {
       setIsLoading(false);
     }
@@ -69,19 +66,17 @@ export default function Customers() {
     };
 
     try {
-      const url = editing === null ? `${API}/customers` : `${API}/customers/${editing}`;
-      const res = await fetch(url, {
+      const path = editing === null ? '/customers' : `/customers/${editing}`;
+      await apiRequest<Customer>(path, {
         method: editing === null ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error((await res.text()) || 'Unable to save customer');
       setMessage(editing === null ? 'Customer added successfully!' : 'Customer updated successfully!');
       setEditing(null);
       setForm(emptyCustomerForm());
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to save customer');
+      setMessage(error instanceof Error ? error.message : 'Unable to save customer.');
     } finally {
       setIsSaving(false);
     }
