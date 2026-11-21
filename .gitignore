@@ -22,3 +22,6 @@ __pycache__/
 .pytest_cache/
 backend/khatha.db
 backend/*.db
+
+# Local MCP client config (may contain tokens)
+.mcp.json
