@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import shellCss from '../../styles/app-shell.css?raw';
 import logo from '../../assets/chotu-logo-transparent.png';
@@ -60,10 +60,20 @@ export default function AppShell() {
   const menuButton = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLDivElement>(null);
 
-  const close = useCallback((restoreFocus = true) => {
+  const restoreFocus = useRef(false);
+
+  const close = useCallback((returnFocus = true) => {
+    restoreFocus.current = returnFocus;
     setOpen(false);
-    if (restoreFocus) requestAnimationFrame(() => menuButton.current?.focus());
   }, []);
+
+  // After the drawer has closed (DOM updated), give focus back to the ☰ button.
+  useLayoutEffect(() => {
+    if (!open && restoreFocus.current) {
+      restoreFocus.current = false;
+      menuButton.current?.focus();
+    }
+  }, [open]);
 
   // Move focus into the drawer when it opens; lock page scroll behind it.
   useEffect(() => {
