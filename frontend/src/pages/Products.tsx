@@ -138,16 +138,6 @@ export default function Products() {
   return (
     <main className="management-page">
       <div className="management-shell">
-        <header className="management-topbar">
-          <a className="management-brand" href="/home" aria-label="CHOTU.ai home">
-            CHOTU<span>.ai</span>
-          </a>
-          <button className="management-back" type="button" onClick={() => history.back()}>
-            <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-            Back
-          </button>
-        </header>
-
         <section className="management-intro" aria-labelledby="products-page-title">
           <p className="management-eyebrow">Inventory / Counter stock</p>
           <h1 id="products-page-title">Product update &amp; stock entry</h1>

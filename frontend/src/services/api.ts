@@ -169,7 +169,13 @@ async function authedFetch(path: string, init: RequestInit = {}): Promise<Respon
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await authedFetch(path, init);
+  let res: Response;
+  try {
+    res = await authedFetch(path, init);
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError('Cannot reach the server. Check that the backend is running and the internet is on.', undefined, 'NETWORK');
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw apiError(res, body);
   return body as T;

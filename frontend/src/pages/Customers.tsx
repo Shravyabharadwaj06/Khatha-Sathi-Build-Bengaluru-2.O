@@ -125,16 +125,6 @@ export default function Customers() {
   return (
     <main className="management-page">
       <div className="management-shell">
-        <header className="management-topbar">
-          <a className="management-brand" href="/home" aria-label="CHOTU.ai home">
-            CHOTU<span>.ai</span>
-          </a>
-          <button className="management-back" type="button" onClick={() => history.back()}>
-            <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-            Back
-          </button>
-        </header>
-
         <section className="management-intro" aria-labelledby="customers-page-title">
           <p className="management-eyebrow">Customers / Khata directory</p>
           <h1 id="customers-page-title">Customer update</h1>
