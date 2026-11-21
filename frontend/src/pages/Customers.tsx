@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 
 const API = 'http://127.0.0.1:8000';
 
+interface CustomerRow {
+  id: number | string;
+  name?: string;
+  phone_number?: string | null;
+  whatsapp_number?: string | null;
+  credit_score?: number | null;
+}
+
+type CustomerForm = Record<string, string | number>;
+
 export default function Customers() {
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [editing, setEditing] = useState<number | null>(null);
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [editing, setEditing] = useState<number | string | null>(null);
   const [message, setMessage] = useState('');
   const emptyForm = {
     name: '',
@@ -12,7 +22,7 @@ export default function Customers() {
     whatsapp_number: '',
     credit_score: 0
   };
-  const [form, setForm] = useState<any>(emptyForm);
+  const [form, setForm] = useState<CustomerForm>(emptyForm);
 
   const load = async () => {
     try {
@@ -26,11 +36,11 @@ export default function Customers() {
 
   useEffect(() => { load(); }, []);
 
-  const change = (e: any) => {
+  const change = (e: ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const save = async (e: any) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault();
     setMessage('');
 
@@ -56,12 +66,12 @@ export default function Customers() {
       setEditing(null);
       setForm(emptyForm);
       await load();
-    } catch (err: any) {
-      setMessage(err.message || 'Unable to save customer');
+    } catch (err) {
+      setMessage((err instanceof Error && err.message) || 'Unable to save customer');
     }
   };
 
-  const edit = (c: any) => {
+  const edit = (c: CustomerRow) => {
     setEditing(c.id);
     setForm({
       name: c.name || '',

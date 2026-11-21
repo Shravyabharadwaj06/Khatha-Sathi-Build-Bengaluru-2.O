@@ -1,14 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 
 const API = 'http://127.0.0.1:8000';
 
+interface ProductRow {
+  id: number | string;
+  name?: string;
+  category?: string | null;
+  selling_price?: number | null;
+  purchase_price?: number | null;
+  stock_quantity?: number | null;
+  unit?: string | null;
+  expiry_date?: string | null;
+  low_stock_threshold?: number | null;
+}
+
+type ProductForm = Record<string, string | number>;
+
 export default function Products() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [form, setForm] = useState<ProductForm>({
     name: '', category: '', selling_price: '', purchase_price: '',
     stock_quantity: '', unit: 'pcs', expiry_date: '', low_stock_threshold: 5
   });
-  const [editing, setEditing] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | string | null>(null);
   const [message, setMessage] = useState('');
 
   const load = async () => {
@@ -23,9 +37,9 @@ export default function Products() {
 
   useEffect(() => { load(); }, []);
 
-  const change = (e: any) => setForm({ ...form, [e.target.name]: e.target.value });
+  const change = (e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const save = async (e: any) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault();
     setMessage('');
     const payload = {
@@ -49,12 +63,12 @@ export default function Products() {
       setEditing(null);
       setForm({ name: '', category: '', selling_price: '', purchase_price: '', stock_quantity: '', unit: 'pcs', expiry_date: '', low_stock_threshold: 5 });
       load();
-    } catch (err: any) {
-      setMessage(err.message || 'Unable to save product');
+    } catch (err) {
+      setMessage((err instanceof Error && err.message) || 'Unable to save product');
     }
   };
 
-  const edit = (p: any) => {
+  const edit = (p: ProductRow) => {
     setEditing(p.id);
     setForm({
       name: p.name || '', category: p.category || '',
