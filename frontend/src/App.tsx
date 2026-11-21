@@ -1,4 +1,4 @@
-﻿import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
