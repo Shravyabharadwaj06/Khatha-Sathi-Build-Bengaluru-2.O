@@ -11,6 +11,7 @@ import ReportSent from './pages/ReportSent';
 import MyReports from './pages/MyReports';
 import Products from './pages/Products';
 import Customers from './pages/Customers';
+import Assistant from './pages/Assistant';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { logout } from './services/api';
 import { clearSession, getSession } from './services/session';
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/report-issue" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
         <Route path="/report-sent" element={<ProtectedRoute><ReportSent /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
+        <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
 
         <Route path="/terms" element={<Legal kind="terms" />} />
         <Route path="/privacy" element={<Legal kind="privacy" />} />
