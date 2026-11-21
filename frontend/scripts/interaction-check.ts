@@ -86,7 +86,6 @@ const STATES: StateCase[] = [
   { name: 'home-card-hover', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [hover('.feature:nth-child(2)'), wait(300)] },
   { name: 'home-card-toast', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [click('.feature:nth-child(1)'), wait(300)] },
   { name: 'home-toast-gone-1800ms', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [click('.feature:nth-child(1)'), wait(2100)] },
-  { name: 'home-profile-toast-mobile', width: 360, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [click('[data-action="My Profile"]'), wait(300)] },
   { name: 'home-keyboard-focus-ring', width: 1440, original: '/__ref/home_page_files/home_page.html', app: '/home', session: true, steps: [press('Tab', 3), wait(300)] },
 ];
 
@@ -145,6 +144,17 @@ async function partB(browser: Browser) {
     await page.waitForURL((u) => u.pathname === path, { timeout: 3000 }).catch(() => {});
     return new URL(page.url()).pathname === path;
   };
+
+  {
+    // "My Profile" on Home used to show a toast (original Stitch design); since PR #2 it opens /profile.
+    const { ctx, page, errors } = await fresh(360);
+    await ctx.addInitScript((s) => localStorage.setItem('chotu.session', s), SESSION);
+    await page.goto(BASE + '/home');
+    await page.click('[data-action="My Profile"]');
+    check('Home (360px): "My Profile" navigates to /profile', await at(page, '/profile'));
+    allErrors.push(...errors);
+    await ctx.close();
+  }
 
   {
     const { ctx, page, errors } = await fresh();

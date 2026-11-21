@@ -1,4 +1,4 @@
-﻿import illustration1 from '../assets/illustration-1.png';
+import illustration1 from '../assets/illustration-1.png';
 import illustration2 from '../assets/illustration-2.png';
 import illustration3 from '../assets/illustration-3.png';
 import illustration4 from '../assets/illustration-4.png';
