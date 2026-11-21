@@ -117,6 +117,20 @@ export default function Customers() {
     }
   };
 
+  /** Archive (soft delete): the customer disappears from lists; its history stays in the khata. */
+  const archive = async (customer: Customer) => {
+    if (!window.confirm(`Archive ${customer.name}? It will be hidden from the list. Past bills stay in the khata.`)) return;
+    setMessage('');
+    try {
+      await apiRequest(`/customers/${customer.id}`, { method: 'DELETE' });
+      if (editing === customer.id) cancelEdit();
+      setMessage(`${customer.name} archived.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not archive.');
+    }
+  };
+
   const cancelEdit = () => {
     setEditing(null);
     setForm(emptyCustomerForm());
@@ -273,6 +287,9 @@ export default function Customers() {
                       <td data-label="Action">
                         <button className="management-row-action" type="button" onClick={() => edit(customer)} aria-label={`Edit ${customer.name}`}>
                           Edit
+                        </button>
+                        <button className="management-row-action" type="button" onClick={() => void archive(customer)} aria-label={`Archive ${customer.name}`}>
+                          Archive
                         </button>
                         {customer.outstanding_balance > 0 && (
                           <button

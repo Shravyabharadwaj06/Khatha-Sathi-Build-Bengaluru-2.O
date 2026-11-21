@@ -130,6 +130,20 @@ export default function Products() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /** Archive (soft delete): the product disappears from lists; its history stays in the khata. */
+  const archive = async (product: Product) => {
+    if (!window.confirm(`Archive ${product.name}? It will be hidden from the list. Past bills stay in the khata.`)) return;
+    setMessage('');
+    try {
+      await apiRequest(`/products/${product.id}`, { method: 'DELETE' });
+      if (editing === product.id) cancelEdit();
+      setMessage(`${product.name} archived.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not archive.');
+    }
+  };
+
   const cancelEdit = () => {
     setEditing(null);
     setForm(emptyProductForm());
@@ -243,6 +257,9 @@ export default function Products() {
                     <td data-label="Action">
                       <button className="management-row-action" type="button" onClick={() => edit(product)} aria-label={`Edit ${product.name}`}>
                         Edit
+                      </button>
+                      <button className="management-row-action" type="button" onClick={() => void archive(product)} aria-label={`Archive ${product.name}`}>
+                        Archive
                       </button>
                     </td>
                   </tr>
