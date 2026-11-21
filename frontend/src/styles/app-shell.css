@@ -260,6 +260,17 @@
   padding: var(--cs-space-3) 0 0;
 }
 
+/* ------------------------------------------------------------------ Products / Customers (Shravya's management pages) */
+.cs-content .management-page {
+  min-height: 0;
+}
+.cs-content .management-shell {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* ------------------------------------------------------------------ Report pages */
 .cs-content .report-page {
   min-height: 0;

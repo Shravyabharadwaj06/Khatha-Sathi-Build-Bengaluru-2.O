@@ -1,172 +1,317 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { usePageStyles } from '../hooks/usePageStyles';
+import { apiRequest } from '../services/api';
+import managementCss from '../styles/management-pages.css?raw';
+import { formatRupees } from '../utils/money';
 
-const API = 'http://127.0.0.1:8000';
-
-interface CustomerRow {
-  id: number | string;
-  name?: string;
-  phone_number?: string | null;
-  whatsapp_number?: string | null;
-  credit_score?: number | null;
+interface Customer {
+  id: string;
+  name: string;
+  phone_number: string | null;
+  whatsapp_number: string | null;
+  credit_score: number | null;
+  /** Rupees, computed by the backend from the ledger (never edited directly). */
+  outstanding_balance: number;
 }
 
-type CustomerForm = Record<string, string | number>;
+interface CustomerForm {
+  name: string;
+  phone_number: string;
+  whatsapp_number: string;
+  credit_score: string;
+  /** Opening balance from the paper khata (rupees). Only sent when the customer is added. */
+  opening_balance: string;
+}
+
+const toPaise = (rupees: number) => Math.round(rupees * 100);
+
+const emptyCustomerForm = (): CustomerForm => ({
+  name: '',
+  phone_number: '',
+  whatsapp_number: '',
+  credit_score: '0',
+  opening_balance: '',
+});
 
 export default function Customers() {
-  const [customers, setCustomers] = useState<CustomerRow[]>([]);
-  const [editing, setEditing] = useState<number | string | null>(null);
+  usePageStyles({ css: [managementCss], bodyClass: 'management-body', title: 'CHOTU.ai | Customer update' });
+
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState('');
-  const emptyForm = {
-    name: '',
-    phone_number: '',
-    whatsapp_number: '',
-    credit_score: 0
-  };
-  const [form, setForm] = useState<CustomerForm>(emptyForm);
+  const [form, setForm] = useState<CustomerForm>(emptyCustomerForm);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const editingCustomer = editing === null ? null : customers.find((c) => c.id === editing) ?? null;
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const res = await fetch(`${API}/customers`);
-      if (!res.ok) throw new Error();
-      setCustomers(await res.json());
-    } catch {
-      setMessage('Could not connect to backend. Make sure FastAPI is running.');
+      setCustomers(await apiRequest<Customer[]>('/customers'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load customers.');
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const change = (event: ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.currentTarget;
+    setForm((current) => ({ ...current, [name]: value }));
   };
 
-  useEffect(() => { load(); }, []);
-
-  const change = (e: ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSaving) return;
     setMessage('');
-
+    setIsSaving(true);
+    const { opening_balance, ...details } = form;
+    // A balance changes only through bills, payments or undo; the opening balance is sent once, when adding.
     const payload = {
-      ...form,
-      credit_score: Number(form.credit_score)
+      ...details,
+      credit_score: Number(form.credit_score),
+      ...(editing === null && opening_balance.trim() !== '' ? { outstanding_balance: Number(opening_balance) } : {}),
     };
 
     try {
-      const url = editing === null
-        ? `${API}/customers`
-        : `${API}/customers/${editing}`;
-
-      const res = await fetch(url, {
+      const path = editing === null ? '/customers' : `/customers/${editing}`;
+      await apiRequest<Customer>(path, {
         method: editing === null ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-
-      if (!res.ok) throw new Error(await res.text());
-
       setMessage(editing === null ? 'Customer added successfully!' : 'Customer updated successfully!');
       setEditing(null);
-      setForm(emptyForm);
+      setForm(emptyCustomerForm());
       await load();
-    } catch (err) {
-      setMessage((err instanceof Error && err.message) || 'Unable to save customer');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to save customer.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const edit = (c: CustomerRow) => {
-    setEditing(c.id);
+  const edit = (customer: Customer) => {
+    setEditing(customer.id);
     setForm({
-      name: c.name || '',
-      phone_number: c.phone_number || '',
-      whatsapp_number: c.whatsapp_number || '',
-      credit_score: c.credit_score ?? 0
+      name: customer.name || '',
+      phone_number: customer.phone_number || '',
+      whatsapp_number: customer.whatsapp_number || '',
+      credit_score: String(customer.credit_score ?? 0),
+      opening_balance: '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /** Opens WhatsApp with a reminder pre-filled from the backend (balance from the ledger). Nothing is sent automatically. */
+  const remind = async (customer: Customer) => {
+    setMessage('');
+    try {
+      const { url } = await apiRequest<{ url: string }>(`/customers/${customer.id}/whatsapp`);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not prepare the WhatsApp reminder.');
+    }
+  };
+
+  /** Archive (soft delete): the customer disappears from lists; its history stays in the khata. */
+  const archive = async (customer: Customer) => {
+    if (!window.confirm(`Archive ${customer.name}? It will be hidden from the list. Past bills stay in the khata.`)) return;
+    setMessage('');
+    try {
+      await apiRequest(`/customers/${customer.id}`, { method: 'DELETE' });
+      if (editing === customer.id) cancelEdit();
+      setMessage(`${customer.name} archived.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not archive.');
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditing(null);
+    setForm(emptyCustomerForm());
+  };
+
   return (
-    <main style={{ color: '#17243b' }}>
-      <button onClick={() => history.back()} style={{ padding: '0 16px', minHeight: 48, borderRadius: 4, cursor: 'pointer' }}>← Back</button>
+    <main className="management-page">
+      <div className="management-shell">
+        <section className="management-intro" aria-labelledby="customers-page-title">
+          <p className="management-eyebrow">Customers / Khata directory</p>
+          <h1 id="customers-page-title">Customer update</h1>
+          <p>Add customers and manage their contact details and credit score.</p>
+        </section>
 
-      <h1 style={{ margin: '24px 0 8px' }}>Customer Update</h1>
-      <p style={{ margin: '0 0 24px' }}>Add customers and manage their contact details and credit score.</p>
+        <div className="management-form-layout">
+          <section className="management-panel" aria-labelledby="customer-form-title">
+            <div className="management-panel-heading">
+              <div>
+                <h2 id="customer-form-title">{editing === null ? 'Add a customer' : 'Edit customer'}</h2>
+                <p>Customer details stay connected to their khata record.</p>
+              </div>
+            </div>
 
-      <form onSubmit={save} style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))',
-        gap: 16,
-        alignItems: 'end',
-        background: '#fff',
-        padding: 24,
-        borderRadius: 8
-      }}>
-        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
-          Customer name
-          <input name="name" value={form.name} onChange={change} required style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
-        </label>
-
-        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
-          Phone number
-          <input name="phone_number" value={form.phone_number} onChange={change} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
-        </label>
-
-        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
-          WhatsApp number
-          <input name="whatsapp_number" value={form.whatsapp_number} onChange={change} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
-        </label>
-
-        <label style={{ display: 'grid', gap: 8, fontWeight: 600 }}>
-          Credit score
-          <input name="credit_score" type="number" min="0" value={form.credit_score} onChange={change} style={{ padding: '0 12px', minHeight: 48, border: '1px solid #ccd3df', borderRadius: 4 }} />
-        </label>
-
-        <button type="submit" style={{
-          padding: '0 16px',
-          minHeight: 48,
-          background: '#f5c842',
-          border: 0,
-          borderRadius: 4,
-          fontWeight: 700,
-          cursor: 'pointer'
-        }}>
-          {editing === null ? 'Add Customer' : 'Save Changes'}
-        </button>
-
-        {editing !== null && (
-          <button type="button" onClick={() => {
-            setEditing(null);
-            setForm(emptyForm);
-          }} style={{ minHeight: 48, borderRadius: 4, cursor: 'pointer' }}>
-            Cancel Edit
-          </button>
-        )}
-      </form>
-
-      {message && <p role="status">{message}</p>}
-
-      <h2 style={{ margin: '40px 0 16px' }}>Customers ({customers.length})</h2>
-
-      <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 8 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr>
-              {['Name', 'Phone', 'WhatsApp', 'Credit score', 'Action'].map(x =>
-                <th key={x} style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', textAlign: x === 'Credit score' ? 'right' : 'left' }}>{x}</th>
+            <form onSubmit={save} className="management-form-grid management-customer-form">
+              <div className="management-field">
+                <label htmlFor="customer-name">Customer name <span className="management-required">*</span></label>
+                <input
+                  className="management-input"
+                  id="customer-name"
+                  name="name"
+                  type="text"
+                  value={form.name}
+                  onChange={change}
+                  autoComplete="name"
+                  required
+                />
+              </div>
+              <div className="management-field">
+                <label htmlFor="customer-phone">Phone number</label>
+                <input
+                  className="management-input"
+                  id="customer-phone"
+                  name="phone_number"
+                  type="tel"
+                  inputMode="tel"
+                  value={form.phone_number}
+                  onChange={change}
+                  autoComplete="tel"
+                />
+              </div>
+              <div className="management-field">
+                <label htmlFor="customer-whatsapp">WhatsApp number</label>
+                <input
+                  className="management-input"
+                  id="customer-whatsapp"
+                  name="whatsapp_number"
+                  type="tel"
+                  inputMode="tel"
+                  value={form.whatsapp_number}
+                  onChange={change}
+                  autoComplete="tel"
+                />
+              </div>
+              <div className="management-field">
+                <label htmlFor="customer-credit-score">Credit score</label>
+                <input
+                  className="management-input"
+                  id="customer-credit-score"
+                  name="credit_score"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.credit_score}
+                  onChange={change}
+                />
+              </div>
+              {editing === null ? (
+                <div className="management-field">
+                  <label htmlFor="customer-opening-balance">Opening balance (₹)</label>
+                  <input
+                    className="management-input"
+                    id="customer-opening-balance"
+                    name="opening_balance"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={form.opening_balance}
+                    onChange={change}
+                    aria-describedby="customer-opening-balance-hint"
+                  />
+                  <small id="customer-opening-balance-hint">From your paper khata. Can only be entered once, when adding.</small>
+                </div>
+              ) : (
+                <div className="management-field">
+                  <label htmlFor="customer-balance">Current balance (₹)</label>
+                  <input
+                    className="management-input"
+                    id="customer-balance"
+                    type="text"
+                    value={editingCustomer ? formatRupees(toPaise(editingCustomer.outstanding_balance)) : '—'}
+                    readOnly
+                    aria-readonly="true"
+                    aria-describedby="customer-balance-hint"
+                  />
+                  <small id="customer-balance-hint">Changes only through bills, payments or undo.</small>
+                </div>
               )}
-            </tr>
-          </thead>
-          <tbody>
-            {customers.map(c => (
-              <tr key={c.id}>
-                <td style={{ padding: '12px 16px' }}>{c.name}</td>
-                <td style={{ padding: '12px 16px', fontVariantNumeric: 'tabular-nums' }}>{c.phone_number || '—'}</td>
-                <td style={{ padding: '12px 16px', fontVariantNumeric: 'tabular-nums' }}>{c.whatsapp_number || '—'}</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{c.credit_score ?? '—'}</td>
-                <td style={{ padding: '8px 16px' }}>
-                  <button onClick={() => edit(c)} style={{ minHeight: 48, borderRadius: 4, padding: '0 16px', cursor: 'pointer' }}>Edit</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              <div className="management-form-actions">
+                <button className="management-button management-button-primary" type="submit" disabled={isSaving} aria-busy={isSaving}>
+                  <span className="material-symbols-outlined" aria-hidden="true">{editing === null ? 'person_add' : 'save'}</span>
+                  {isSaving ? 'Saving…' : editing === null ? 'Add customer' : 'Save changes'}
+                </button>
+                {editing !== null && (
+                  <button className="management-button management-button-secondary" type="button" onClick={cancelEdit}>
+                    Cancel edit
+                  </button>
+                )}
+              </div>
+            </form>
+            {message && <p className="management-notice" role="status">{message}</p>}
+          </section>
+
+          <section className="management-panel management-panel-customer-list" aria-labelledby="customers-list-title">
+            <div className="management-panel-heading">
+              <h2 className="management-section-title" id="customers-list-title">
+                Registered customers <span>{customers.length} in directory</span>
+              </h2>
+              <span className="management-count" role="status">
+                {isLoading ? 'Loading…' : `${customers.length} total`}
+              </span>
+            </div>
+
+            <div className="management-table-wrap">
+              <table className="management-table management-table-customers">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Phone</th>
+                    <th scope="col">WhatsApp</th>
+                    <th scope="col">Credit score</th>
+                    <th scope="col" className="management-num">Due</th>
+                    <th scope="col"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.map((customer) => (
+                    <tr key={customer.id}>
+                      <td data-label="Name">{customer.name}</td>
+                      <td data-label="Phone">{customer.phone_number || '—'}</td>
+                      <td data-label="WhatsApp">{customer.whatsapp_number || '—'}</td>
+                      <td data-label="Credit score">{customer.credit_score ?? '—'}</td>
+                      <td data-label="Due" className="management-num">{formatRupees(toPaise(customer.outstanding_balance ?? 0))}</td>
+                      <td data-label="Action">
+                        <button className="management-row-action" type="button" onClick={() => edit(customer)} aria-label={`Edit ${customer.name}`}>
+                          Edit
+                        </button>
+                        <button className="management-row-action" type="button" onClick={() => void archive(customer)} aria-label={`Archive ${customer.name}`}>
+                          Archive
+                        </button>
+                        {customer.outstanding_balance > 0 && (
+                          <button
+                            className="management-row-action"
+                            type="button"
+                            onClick={() => void remind(customer)}
+                            aria-label={`Send a WhatsApp reminder to ${customer.name}`}
+                          >
+                            WhatsApp
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!isLoading && customers.length === 0 && (
+                    <tr><td className="management-table-empty" colSpan={6}>No customers yet. Add your first customer here.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );

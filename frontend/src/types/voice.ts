@@ -167,6 +167,8 @@ export type VoiceErrorCode =
   | 'PRODUCT_NOT_FOUND'
   | 'NO_OPEN_DRAFT'
   | 'NOTHING_TO_UNDO'
+  | 'PAYMENT_MORE_THAN_DUE'
+  | 'NOTHING_DUE'
   | 'INTERNAL'
   // frontend-only codes (never sent by the backend)
   | 'MIC_UNSUPPORTED'

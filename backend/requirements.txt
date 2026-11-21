@@ -1,7 +1,13 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-pydantic
-python-multipart
-pytest
-httpx
+# Pinned versions (tested together). Upgrade deliberately, then run pytest.
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.9
+psycopg[binary]==3.3.9
+pydantic==2.14.4
+PyJWT[crypto]==2.15.1
+python-dotenv==1.2.4
+python-multipart==0.0.34
+httpx==0.28.1
+
+# tests
+pytest==9.2.0

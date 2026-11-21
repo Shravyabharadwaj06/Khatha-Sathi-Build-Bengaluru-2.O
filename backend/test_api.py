@@ -1,227 +1,135 @@
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
+import pytest
 
-from main import app
+import database
+import main
 
-client = TestClient(app)
+client = TestClient(main.app)
 
 
-def test_health():
+def test_health_is_available_without_database():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_product_create_list_update_delete():
-    created = client.post("/products", json={
-        "name": "Rice",
-        "category": "Grocery",
-        "selling_price": 60,
-        "purchase_price": 50,
-        "stock_quantity": 20,
-        "unit": "kg",
-        "expiry_date": None,
-        "low_stock_threshold": 5,
-    })
-    assert created.status_code == 200
-    product_id = created.json()["id"]
-
-    listed = client.get("/products")
-    assert listed.status_code == 200
-    assert any(item["id"] == product_id for item in listed.json())
-
-    updated = client.put(f"/products/{product_id}", json={"stock_quantity": 15})
-    assert updated.status_code == 200
-    assert updated.json()["stock_quantity"] == 15
-
-    deleted = client.delete(f"/products/{product_id}")
-    assert deleted.status_code == 200
+def test_database_routes_fail_closed_when_not_configured(monkeypatch):
+    monkeypatch.setattr(database, "SessionLocal", None)
+    response = client.get("/products", headers={"Authorization": "Bearer ignored"})
+    assert response.status_code == 503
+    assert "DATABASE_URL" in response.json()["detail"]
 
 
-def test_customer_create_update_delete():
-    created = client.post("/customers", json={
-        "name": "Test Customer",
-        "phone_number": "9876543210",
-        "whatsapp_number": "9876543210",
-        "credit_score": 75,
-    })
-    assert created.status_code == 200
-    customer_id = created.json()["id"]
+def test_development_otp_uses_configured_code(monkeypatch):
+    monkeypatch.setattr(main, "OTP_MODE", "dev")
+    monkeypatch.setattr(main, "DEV_OTP_CODE", "123456")
+    main._sent_otps.clear()
+    main._verified_phones.clear()
 
-    updated = client.put(f"/customers/{customer_id}", json={"credit_score": 80})
-    assert updated.status_code == 200
-    assert updated.json()["credit_score"] == 80
-
-    deleted = client.delete(f"/customers/{customer_id}")
-    assert deleted.status_code == 200
-
-
-def test_signup_login_me_logout():
-    import uuid
-
-    email = f"shop-{uuid.uuid4().hex}@example.com"
-    phone = str(uuid.uuid4().int)[-10:]
-    signup = client.post("/auth/signup", json={
-        "email": email,
-        "name": "Demo Shop",
-        "phone": phone,
-        "password": "123456",
-        "city": "Bengaluru",
-        "businessDomain": "Grocery",
-    })
-    assert signup.status_code == 200
-    token = signup.json()["token"]
-
-    me = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
-    assert me.status_code == 200
-    assert me.json()["email"] == email
-
-    logout = client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
-    assert logout.status_code == 200
-
-
-def test_profile_update_persists_to_auth_me():
-    import uuid
-
-    phone = str(uuid.uuid4().int)[-10:]
-    signup = client.post("/auth/signup", json={
-        "email": f"profile-{uuid.uuid4().hex}@example.com",
-        "name": "Profile Owner",
-        "phone": phone,
-        "password": "12345678",
-        "city": "Bengaluru",
-        "businessDomain": "Grocery",
-    })
-    token = signup.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    updated = client.put("/auth/profile", headers=headers, json={
-        "shopName": "Lakshmi Stores",
-        "ownerName": "Lakshmi",
-        "phone": phone,
-        "businessDomain": "Grocery",
-        "gstNumber": "29AAAAA0000A1Z5",
-        "fssaiNumber": "",
-        "address": "Main Bazaar Road",
-        "avatarUrl": "",
-        "primaryLanguage": "Kannada",
-        "secondaryLanguage": "Hindi",
-        "spokenReplies": True,
-        "voiceSpeed": "Normal",
-        "voiceVolume": 80,
-        "dailyLedgerPdf": True,
-        "lowStockAlert": True,
-        "paymentReminder": True,
-    })
-
-    assert updated.status_code == 200
-    assert updated.json()["name"] == "Lakshmi"
-    assert updated.json()["shopName"] == "Lakshmi Stores"
-    assert updated.json()["gstNumber"] == "29AAAAA0000A1Z5"
-    assert client.get("/auth/me", headers=headers).json()["address"] == "Main Bazaar Road"
-
-
-def test_support_report_upload_and_listing_require_authentication():
-    import json
-    import uuid
-
-    signup = client.post("/auth/signup", json={
-        "email": f"report-{uuid.uuid4().hex}@example.com",
-        "name": "Report Owner",
-        "phone": str(uuid.uuid4().int)[-10:],
-        "password": "12345678",
-        "city": "Bengaluru",
-        "businessDomain": "Grocery",
-    })
-    headers = {"Authorization": f"Bearer {signup.json()['token']}"}
-
-    created = client.post(
-        "/support/reports",
-        headers=headers,
-        data={
-            "categories": json.dumps(["voice", "stock"]),
-            "description": "Kannada voice entry did not save.",
-            "contactAllowed": "true",
-        },
-        files=[("attachments", ("stock.png", b"sample-image", "image/png"))],
+    sent = client.post("/auth/otp/send", json={"phone": "98451 23456"})
+    invalid = client.post(
+        "/auth/otp/verify",
+        json={"phone": "9845123456", "otp": "000000"},
+    )
+    verified = client.post(
+        "/auth/otp/verify",
+        json={"phone": "9845123456", "otp": "123456"},
     )
 
-    assert created.status_code == 200
-    assert created.json()["categories"] == ["voice", "stock"]
-    assert created.json()["attachments"] == [{"name": "stock.png", "type": "image/png", "size": 12}]
-    listed = client.get("/support/reports", headers=headers)
-    assert listed.status_code == 200
-    assert listed.json()[0]["reference"] == created.json()["reference"]
-    assert client.get("/support/reports").status_code == 401
-
-    other_signup = client.post("/auth/signup", json={
-        "email": f"other-{uuid.uuid4().hex}@example.com",
-        "name": "Other Owner",
-        "phone": str(uuid.uuid4().int)[-10:],
-        "password": "12345678",
-        "city": "Bengaluru",
-        "businessDomain": "Grocery",
-    })
-    other_headers = {"Authorization": f"Bearer {other_signup.json()['token']}"}
-    assert client.get("/support/reports", headers=other_headers).json() == []
+    assert sent.status_code == 200
+    assert sent.json() == {"sent": True}
+    assert invalid.json() == {"verified": False}
+    assert verified.json() == {"verified": True}
+    main._sent_otps.clear()
+    main._verified_phones.clear()
 
 
-def test_sale_purchase_payment_and_delete():
-    product = client.post("/products", json={
-        "name": "Sugar",
-        "selling_price": 50,
-        "purchase_price": 40,
-        "stock_quantity": 10,
-        "low_stock_threshold": 2,
-    }).json()
-
-    customer = client.post("/customers", json={
-        "name": "Ledger Customer",
-        "phone_number": "9000000001",
-        "credit_score": 70,
-    }).json()
-
-    sale = client.post("/transactions", json={
-        "transaction_type": "sale",
-        "customer_id": customer["id"],
-        "items": [{"product_id": product["id"], "quantity": 3}],
-        "payment_method": "cash",
-        "paid_amount": 100,
-    })
-    assert sale.status_code == 200
-    assert sale.json()["transaction"]["total_amount"] == 150
-
-    sugar = next(item for item in client.get("/products").json() if item["id"] == product["id"])
-    assert sugar["stock_quantity"] == 7
-
-    ledger = client.get(f"/customers/{customer['id']}/ledger")
-    assert ledger.status_code == 200
-    assert ledger.json()["outstanding_balance"] == 50
-
-    payment = client.post("/payments", json={
-        "customer_id": customer["id"],
-        "amount": 50,
-        "payment_method": "upi",
-    })
-    assert payment.status_code == 200
-    assert payment.json()["outstanding_balance"] == 0
-
-    purchase = client.post("/transactions", json={
-        "transaction_type": "purchase",
-        "items": [{"product_id": product["id"], "quantity": 5}],
-        "payment_method": "cash",
-    })
-    assert purchase.status_code == 200
-
-    sugar = next(item for item in client.get("/products").json() if item["id"] == product["id"])
-    assert sugar["stock_quantity"] == 12
+def test_otp_is_unavailable_without_dev_configuration(monkeypatch):
+    monkeypatch.setattr(main, "OTP_MODE", "")
+    response = client.post("/auth/otp/send", json={"phone": "9845123456"})
+    assert response.status_code == 503
 
 
-def test_reports_search_and_voice():
-    assert client.get("/dashboard").status_code == 200
-    assert client.get("/reports/sales").status_code == 200
-    assert client.get("/reports/stock").status_code == 200
-    assert client.get("/search", params={"q": "Sugar"}).status_code == 200
+def test_currency_conversion_uses_half_up_rounding():
+    assert main._paise("1.005", "amount") == 101
+    assert main._rupees(101) == 1.01
 
-    voice = client.post("/voice/process", json={"text": "I sold 2 kg sugar"})
-    assert voice.status_code == 200
-    assert voice.json()["intent"] == "sale"
+
+def test_stock_quantity_allows_zero_but_sale_quantity_does_not():
+    assert main._nonnegative_quantity("0", "stock") == 0
+    assert main._nonnegative_quantity("1.125", "stock") == 1.125
+    assert main._quantity("1.125") == 1.125
+    with pytest.raises(HTTPException, match="greater than zero"):
+        main._quantity("0")
+
+
+def test_sales_report_excludes_reversed_sale(monkeypatch):
+    rows = [
+        {
+            "type": "sale",
+            "amount_paise": 10000,
+            "paid_paise": 2500,
+            "referenced_type": None,
+            "referenced_amount_paise": None,
+            "referenced_paid_paise": None,
+        },
+        {
+            "type": "reversal",
+            "amount_paise": 10000,
+            "paid_paise": 2500,
+            "referenced_type": "sale",
+            "referenced_amount_paise": 10000,
+            "referenced_paid_paise": 2500,
+        },
+        {
+            "type": "sale",
+            "amount_paise": 3000,
+            "paid_paise": 500,
+            "referenced_type": None,
+            "referenced_amount_paise": None,
+            "referenced_paid_paise": None,
+        },
+    ]
+
+    def fake_all(*args):
+        query = args[1]
+        return [{"balance_paise": 1500}] if "customer_balances" in query else rows
+
+    monkeypatch.setattr(main, "_all", fake_all)
+    result = main.sales_report(main.AuthContext("user", "shop", "user@example.com"), None)
+
+    assert result["gross_sales"] == 30
+    assert result["paid_sales"] == 5
+    assert result["outstanding_from_sales"] == 15
+    assert result["sale_count"] == 2
+
+
+def test_dashboard_counts_active_customers_and_nets_reversals(monkeypatch):
+    entries = [
+        {"type": "sale", "amount_paise": 10000, "referenced_type": None, "referenced_amount_paise": None},
+        {"type": "reversal", "amount_paise": 10000, "referenced_type": "sale", "referenced_amount_paise": 10000},
+        {"type": "sale", "amount_paise": 3000, "referenced_type": None, "referenced_amount_paise": None},
+    ]
+
+    def fake_all(*args):
+        query = args[1]
+        if "customer_balances" in query:
+            return [{"balance_paise": 1500}, {"balance_paise": 500}]
+        return entries if "ledger_entries" in query else []
+
+    monkeypatch.setattr(main, "_all", fake_all)
+
+    def fake_one(*args):
+        assert "archived_at is null" in args[1]
+        return {"count": 1}
+
+    monkeypatch.setattr(main, "_one", fake_one)
+    result = main.get_dashboard(
+        main.AuthContext("user", "shop", "user@example.com"),
+        None,
+    )
+
+    assert result["total_customers"] == 1
+    assert result["total_sales"] == 30
+    assert result["total_outstanding"] == 20

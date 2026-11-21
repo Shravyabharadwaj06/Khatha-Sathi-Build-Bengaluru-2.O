@@ -38,3 +38,17 @@ export function updateSessionUser(updates: Partial<Session['user']>): Session | 
   }
   return updated;
 }
+
+export function replaceSession(session: Session): void {
+  try {
+    if (localStorage.getItem(KEY)) {
+      localStorage.setItem(KEY, JSON.stringify(session));
+    } else if (sessionStorage.getItem(KEY)) {
+      sessionStorage.setItem(KEY, JSON.stringify(session));
+    } else {
+      sessionStorage.setItem(KEY, JSON.stringify(session));
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}

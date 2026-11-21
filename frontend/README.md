@@ -13,8 +13,11 @@ npm run dev          # after starting the backend and copying .env.example to .e
 
 For the connected local app, start the backend from `../backend` with
 `python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000`, then copy
-`.env.example` to `.env`. The frontend runs at http://localhost:5173 and uses
-the SQLite-backed API at http://localhost:8000. Local signup OTP: `123456`.
+`.env.example` to `.env` only if `.env` does not already exist. Preserve any
+existing environment file. Configure `../backend/.env` from the backend example
+with the teammate's Supabase values. The frontend runs at http://localhost:5173
+and uses the Supabase-backed API at http://localhost:8000. The development OTP
+is configured in `backend/.env`; no OTP value is hard-coded in the app.
 Set `VITE_USE_MOCK_API=true` in `.env` to use the in-browser mock instead.
 
 ## Scripts
@@ -52,6 +55,7 @@ Never commit `.env`. Only `.env.example` is tracked.
 | `/report-issue` | Submit a support report with optional photos. Protected. | `src/pages/ReportIssue.tsx` |
 | `/report-sent` | Confirmation for the submitted support report. Protected. | `src/pages/ReportSent.tsx` |
 | `/reports` | View previously submitted support reports. Protected. | `src/pages/MyReports.tsx` |
+| `/products`, `/customers` | Protected inventory and customer management screens. API requests include the active bearer token. | `src/pages/Products.tsx`, `src/pages/Customers.tsx` |
 | `/terms`, `/privacy` | Legal pages with **placeholder** text. They use only the existing `.legal*` classes from the Landing CSS. | (not exported, composed from Landing CSS) |
 | `/logout` | Clears the session, then goes to `/login` | none |
 | anything else | Redirects to `/` | none |
@@ -95,7 +99,7 @@ Typed functions: `sendOtp`, `verifyOtp`, `signup`, `login`, `logout`, `getCurren
 
 The session is stored under `chotu.session`: in `localStorage` when "Remember counter device" is checked, otherwise in `sessionStorage`. Sign up always uses `localStorage`.
 
-The real API uses `POST /auth/otp/send`, `POST /auth/otp/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`, with Bearer token auth. Profile settings use `PUT /auth/profile`; support reports use `POST /support/reports` and `GET /support/reports`. Report photos and profile settings are stored in the local SQLite database. Backend validation errors are displayed from FastAPI's `detail` response.
+The real API uses `POST /auth/otp/send`, `POST /auth/otp/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`, with Supabase Auth bearer tokens and refresh. Profile settings use `PUT /auth/profile`; support reports use `POST /support/reports` and `GET /support/reports`. Profile and report photos use private Supabase Storage buckets; metadata/settings live in Supabase Postgres. Backend validation errors are displayed from FastAPI's `detail` response.
 
 ## Visual comparison
 

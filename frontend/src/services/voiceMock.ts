@@ -509,6 +509,10 @@ function understand(rawText: string, language: VoiceLanguage, draftId?: string):
     if (!names.length) return errorResponse(transcript, language, intent, 'CUSTOMER_NOT_FOUND', T.noCustomer);
     const tone: ReminderTone = has(/firm|strict|kadak|sakht/) ? 'firm' : 'soft';
     const resolve = (c: MockCustomer): VoiceResponse => {
+      if (answerKind === 'reminder' && balanceOf(c.id) <= 0)
+        return errorResponse(transcript, language, intent, 'NOTHING_DUE', {
+          hi: `${c.name} ka kuch baaki nahi hai.`, kn: `${c.name} avara baaki illa.`, en: `Nothing is due from ${c.name}.`,
+        });
       const { answer, reply } = answerFor(answerKind, c, language, tone);
       return response({ transcript, language, intent }, { status: 'answer', answer, reply_text: reply });
     };
@@ -523,6 +527,11 @@ function understand(rawText: string, language: VoiceLanguage, draftId?: string):
     if (!amount) return errorResponse(transcript, language, 'RECORD_PAYMENT', 'NOT_UNDERSTOOD', T.notUnderstood);
     const mode: PaymentMode = has(/upi|gpay|phonepe|paytm/) ? 'upi' : 'cash';
     const resolve = (c: MockCustomer): VoiceResponse => {
+      const due = balanceOf(c.id);
+      if (amount > due) {
+        const message = `Payment is more than the due amount (${formatRupees(Math.max(due, 0))}).`;
+        return errorResponse(transcript, language, 'RECORD_PAYMENT', 'PAYMENT_MORE_THAN_DUE', { hi: message, kn: message, en: message });
+      }
       const d = storeDraft(language, {
         intent: 'RECORD_PAYMENT', customer: ref(c), items: [], total_paise: amount, payment_mode: mode, paid_paise: amount,
         reverses_entry_id: null, product: null, changes: [], warnings: [],
