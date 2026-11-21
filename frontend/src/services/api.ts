@@ -9,6 +9,16 @@
  * here and nowhere else.
  */
 import { getSession } from './session';
+import { ApiError } from './errors';
+import { voiceMock } from './voiceMock';
+import type {
+  VoiceCancelResult,
+  VoiceCommandInput,
+  VoiceConfirmResult,
+  VoiceLanguage,
+  VoiceResponse,
+  VoiceUsage,
+} from '../types/voice';
 
 export interface User {
   id: string;
@@ -80,16 +90,7 @@ export interface IssueReport {
   createdAt: string;
 }
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    /** Form field the error belongs to, when applicable. */
-    public field?: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError };
 
 export const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API !== 'false';
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
@@ -284,3 +285,83 @@ export const getCurrentUser = (): Promise<User> => impl.getCurrentUser();
 export const updateProfile = (input: ProfileInput): Promise<User> => impl.updateProfile(input);
 export const createIssueReport = (input: IssueReportInput): Promise<IssueReport> => impl.createIssueReport(input);
 export const listIssueReports = (): Promise<IssueReport[]> => impl.listIssueReports();
+
+// ---------------------------------------------------------------------------
+// Voice assistant (contract: docs/VOICE_CONTRACT.md). Money is integer paise.
+// ---------------------------------------------------------------------------
+
+/** 'gnani': record audio and send it to the backend (default). 'browser': Web Speech API, send text (no credits). */
+export const VOICE_INPUT_MODE: 'gnani' | 'browser' = import.meta.env.VITE_VOICE_INPUT === 'browser' ? 'browser' : 'gnani';
+
+async function voiceFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = getSession()?.token;
+  const isMultipart = init.body instanceof FormData;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        ...(!isMultipart && init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch {
+    throw new ApiError('Cannot reach the server. Check the internet connection.', undefined, 'NETWORK');
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = (body && typeof body.error === 'object' && body.error) || {};
+    const detail = typeof body?.detail === 'string' ? body.detail : undefined;
+    throw new ApiError(
+      err.message ?? detail ?? `Request failed (${res.status})`,
+      undefined,
+      err.code ?? (res.status === 401 ? 'UNAUTHORIZED' : undefined),
+      res.status,
+    );
+  }
+  return res;
+}
+
+const voiceJson = async <T,>(path: string, init: RequestInit = {}): Promise<T> => (await voiceFetch(path, init)).json() as Promise<T>;
+const post = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) });
+
+const AUDIO_EXT: Record<string, string> = { 'audio/wav': 'wav', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/mpeg': 'mp3', 'audio/aac': 'aac', 'audio/flac': 'flac' };
+
+const realVoice = {
+  command(input: VoiceCommandInput) {
+    const body = new FormData();
+    body.set('language', input.language);
+    if (input.text) body.set('text', input.text);
+    else if (input.audio) {
+      const type = input.audio.type.split(';')[0];
+      body.set('audio', input.audio, `clip.${AUDIO_EXT[type] ?? 'wav'}`);
+    }
+    if (input.draftId) body.set('draft_id', input.draftId);
+    return voiceJson<VoiceResponse>('/voice/command', { method: 'POST', body });
+  },
+  choose: (clarifyId: string, optionId: string) => voiceJson<VoiceResponse>('/voice/choose', post({ clarify_id: clarifyId, option_id: optionId })),
+  confirm: (draftId: string) => voiceJson<VoiceConfirmResult>('/voice/confirm', post({ draft_id: draftId })),
+  cancel: (draftId: string) => voiceJson<VoiceCancelResult>('/voice/cancel', post({ draft_id: draftId })),
+  undo: (entryId: string, _language: VoiceLanguage) => {
+    void _language;
+    return voiceJson<VoiceResponse>('/voice/undo', post({ entry_id: entryId }));
+  },
+  speak: async (text: string, language: VoiceLanguage) => (await voiceFetch('/voice/speak', post({ text, language }))).blob(),
+  usage: () => voiceJson<VoiceUsage>('/voice/usage'),
+};
+
+const voiceImpl = USE_MOCK_API ? voiceMock : realVoice;
+
+/** Send a recorded clip or text. Returns a draft, a question (clarify), an answer or an error. Never saves. */
+export const voiceCommand = (input: VoiceCommandInput): Promise<VoiceResponse> => voiceImpl.command(input);
+/** Answer a clarify question (e.g. which Ravi). */
+export const voiceChoose = (clarifyId: string, optionId: string): Promise<VoiceResponse> => voiceImpl.choose(clarifyId, optionId);
+/** The ONLY call that saves anything. */
+export const voiceConfirm = (draftId: string): Promise<VoiceConfirmResult> => voiceImpl.confirm(draftId);
+export const voiceCancel = (draftId: string): Promise<VoiceCancelResult> => voiceImpl.cancel(draftId);
+/** Returns a reversal DRAFT for a saved entry; it still needs voiceConfirm. */
+export const voiceUndo = (entryId: string, language: VoiceLanguage): Promise<VoiceResponse> => voiceImpl.undo(entryId, language);
+/** Spoken reply audio (MP3/WAV). Callers fall back to speechSynthesis on any error. */
+export const voiceSpeak = (text: string, language: VoiceLanguage): Promise<Blob> => voiceImpl.speak(text, language);
+export const voiceUsage = (): Promise<VoiceUsage> => voiceImpl.usage();

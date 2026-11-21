@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "visual:compare": "npm run build && tsx scripts/visual-compare.ts",
     "visual:interactions": "npm run build && tsx scripts/interaction-check.ts",
-    "test:visual": "npm run build && tsx scripts/visual-compare.ts && tsx scripts/interaction-check.ts"
+    "test:visual": "npm run build && tsx scripts/visual-compare.ts && tsx scripts/interaction-check.ts",
+    "test:assistant": "tsx scripts/assistant-check.ts --build"
   },
   "dependencies": {
     "lucide-react": "^1.77.0",
