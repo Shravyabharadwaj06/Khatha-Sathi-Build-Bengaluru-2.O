@@ -50,7 +50,7 @@ The frontend uploads **WAV, 16 kHz, mono, 16-bit PCM** (`audio/wav`, file name `
   - Size ≤ 1 MB.
   - Otherwise return `413 CLIP_TOO_LONG` or `415 UNSUPPORTED_AUDIO`.
 - **Fallback:** if the browser cannot decode its own recording (very rare), it sends the original file **only if** its type is one Gnani accepts (`audio/ogg`, `audio/mp4`/`m4a`, `audio/mpeg`). Otherwise it shows an error and offers browser speech or typing.
-- **Suggestion for the backend:** Gnani `model=prisma-v3.0` with `format=codemix` and `language_code="<chosen language>,en-IN"` handles mixed speech such as "Ravi ge 2 milk add maadu".
+- **What the backend does (built):** Gnani `model=prisma-v3.0`, `language_code="<chosen language>,en-IN"` and **`format=transliterate`**. Transliterate returns Latin letters ("Ravi ge 2 milk add maadu"), which is what the rules parser reads. See `docs/GNANI_NOTES.md` for every Gnani fact used.
 
 ---
 
@@ -250,7 +250,13 @@ Intent → draft:
   "error": { "code": "NOT_UNDERSTOOD", "message": "Could not understand the request." } }
 ```
 
-Other `status: "error"` codes with HTTP 200: `CUSTOMER_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `NO_OPEN_DRAFT` (a follow-up without a draft), `NOTHING_TO_UNDO`.
+Other `status: "error"` codes with HTTP 200:
+- `CUSTOMER_NOT_FOUND`
+- `PRODUCT_NOT_FOUND`
+- `NO_OPEN_DRAFT`: a follow-up without a draft
+- `NOTHING_TO_UNDO`
+- `PAYMENT_MORE_THAN_DUE`: "Ramesh ne 900 diye" when only ₹840 is due. The message is exactly `Payment is more than the due amount (₹840).`
+- `NOTHING_DUE`: a reminder for someone who owes nothing
 
 ---
 
@@ -278,6 +284,7 @@ Errors:
 - `409 DRAFT_NOT_PENDING` (already confirmed or cancelled)
 - `410 DRAFT_EXPIRED`
 - `409 OUT_OF_STOCK`
+- `422 PAYMENT_MORE_THAN_DUE`: the balance changed since the draft. The same rule as `POST /payments`, checked again inside the save transaction.
 
 ### `POST /voice/cancel`
 Body: `{ "draft_id": "4f0c…" }` → `{ "status": "cancelled", "draft_id": "4f0c…" }`
@@ -321,6 +328,7 @@ Every error body has this shape: `{ "error": { "code": "…", "message": "…" }
 | 503 | `GNANI_UNAVAILABLE` | Gnani down or returned 5xx/402 | browser voice / typing |
 | 504 | `GNANI_TIMEOUT` | Gnani took too long | browser voice / typing |
 | 404 / 409 / 410 | `DRAFT_NOT_FOUND`, `DRAFT_NOT_PENDING`, `DRAFT_EXPIRED`, `ENTRY_NOT_FOUND`, `ALREADY_REVERSED`, `OUT_OF_STOCK` | see the endpoints above | explains it and lets the user speak again |
+| 422 | `PAYMENT_MORE_THAN_DUE` | confirm of a payment above the current due | "More than the due amount" with the ₹ figure |
 | 500 | `INTERNAL` | anything else | "Something went wrong" |
 
 ---

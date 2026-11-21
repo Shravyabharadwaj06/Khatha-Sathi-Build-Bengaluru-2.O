@@ -408,6 +408,8 @@ const ERROR_COPY: Record<string, { title: string; help: string; offerFallback?: 
   PRODUCT_NOT_FOUND: { title: 'Product not found', help: 'Say the product name again, or add it first.' },
   NO_OPEN_DRAFT: { title: 'No open bill', help: 'Say the bill first, then change it.' },
   NOTHING_TO_UNDO: { title: 'Nothing to undo', help: 'There is no saved entry to undo.' },
+  PAYMENT_MORE_THAN_DUE: { title: 'More than the due amount', help: 'Check the amount and say it again.' },
+  NOTHING_DUE: { title: 'Nothing is due', help: 'This customer has no pending amount.' },
   DRAFT_EXPIRED: { title: 'This draft expired', help: 'Nothing was saved. Speak again to make a new one.' },
   DRAFT_NOT_FOUND: { title: 'Draft not found', help: 'Nothing was saved. Speak again.' },
   DRAFT_NOT_PENDING: { title: 'Already done', help: 'This draft was already saved or cancelled.' },
