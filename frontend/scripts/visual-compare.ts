@@ -33,13 +33,23 @@ const WIDTHS = [1440, 1024, 768, 390, 360];
 const HEIGHT = 900;
 const FAIL_ABOVE = 0.1; // percent
 
-const PAGES: { name: string; original: string; app: string; session?: boolean }[] = [
+/**
+ * `original` = a Stitch export in design-reference/. Pages with no Stitch export (Terms, Privacy) are compared
+ * with committed screenshots of the approved app instead (`baseline`, in visual-baseline/). Recreate those only
+ * on purpose, after a reviewed design change:  npx tsx scripts/visual-compare.ts --update-baseline
+ * Baselines were taken on Windows/Chromium; font rasterising differs on other OSes, so run this on Windows.
+ */
+const PAGES: { name: string; original?: string; app: string; session?: boolean }[] = [
   { name: 'landing', original: '/__ref/landing_page.html', app: '/' },
   { name: 'login', original: '/__ref/log_in.html', app: '/login' },
   { name: 'signup', original: '/__ref/sign_up.html', app: '/signup' },
+  { name: 'terms', app: '/terms' },
+  { name: 'privacy', app: '/privacy' },
   // Home is no longer a pixel copy of the Stitch export: since feature/ui-polish it is the dashboard inside the
   // app shell (approved). Its behaviour (cards, toasts, focus ring) is checked in scripts/shell-check.ts.
 ];
+const BASELINE = join(ROOT, 'visual-baseline');
+const UPDATE_BASELINE = process.argv.includes('--update-baseline');
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -144,8 +154,24 @@ async function main() {
           if (!page.url().includes('/__ref/')) consoleIssues.push(`[${p.name} ${width}] pageerror: ${e.message}`);
         });
 
-        const a = await shoot(page, p.original, join(OUT, `${p.name}-${width}-original.png`));
         const b = await shoot(page, p.app, join(OUT, `${p.name}-${width}-app.png`));
+        let a: PNG;
+        if (p.original) {
+          a = await shoot(page, p.original, join(OUT, `${p.name}-${width}-original.png`));
+        } else {
+          const baselineFile = join(BASELINE, `${p.name}-${width}.png`);
+          if (UPDATE_BASELINE) {
+            await mkdir(BASELINE, { recursive: true });
+            await writeFile(baselineFile, PNG.sync.write(b));
+            console.log(`${p.name.padEnd(8)} ${String(width).padStart(4)}px  baseline updated`);
+          } else if (!(await exists(baselineFile))) {
+            console.error(`${p.name} ${width}px: missing ${baselineFile} (run with --update-baseline after review)`);
+            process.exitCode = 1;
+            await ctx.close();
+            continue;
+          }
+          a = PNG.sync.read(await readFile(baselineFile));
+        }
         const w = Math.max(a.width, b.width);
         const h = Math.max(a.height, b.height);
         const A = pad(a, w, h);

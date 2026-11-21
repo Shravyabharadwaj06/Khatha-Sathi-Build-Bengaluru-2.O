@@ -663,3 +663,155 @@ body.management-body {
 .management-row-action + .management-row-action {
   margin-left: 8px;
 }
+
+/* report.css has the only other .sr-only, and it is not loaded on these pages. */
+.management-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Search box above the Products / Customers tables (layout only; colours come from .management-input). */
+.management-search {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.management-search .material-symbols-outlined {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: #5b5b79;
+  font-size: 20px;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.management-search .management-input {
+  padding-left: 40px;
+}
+
+.management-row-action {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.management-page select {
+  font: inherit;
+}
+
+a.management-button {
+  text-decoration: none;
+}
+
+.management-eyebrow-link,
+.management-notice a {
+  color: inherit;
+  font-weight: 700;
+}
+
+/* Customer history page */
+.management-history-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.62fr) minmax(0, 1.4fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.management-history-layout .management-panel + .management-panel {
+  margin-top: 0;
+}
+
+.management-history-side {
+  display: grid;
+  gap: 20px;
+}
+
+.management-balance {
+  margin: 0;
+  color: var(--management-ink);
+  font: 700 40px/1 'Barlow Condensed', Impact, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.management-balance-label {
+  margin: 0 0 6px;
+  color: #5b5b79;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.management-payment-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.management-payment-form .management-field:first-child,
+.management-payment-form .management-field-wide,
+.management-payment-form .management-form-actions {
+  grid-column: 1 / -1;
+}
+
+.management-payment-form .management-form-actions {
+  margin-top: 0;
+}
+
+.management-table-history {
+  min-width: 560px;
+}
+
+.management-history-items {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: #464650;
+  font-size: 12px;
+}
+
+@media (max-width: 1040px) {
+  .management-history-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  /* Tables become cards on phones (see the 680px block above); the history table must not keep its desktop width. */
+  .management-table-history {
+    min-width: 0;
+  }
+
+  .management-payment-form {
+    grid-template-columns: 1fr;
+  }
+
+  .management-payment-form .management-field:first-child,
+  .management-payment-form .management-field-wide,
+  .management-payment-form .management-form-actions {
+    grid-column: auto;
+  }
+
+  .management-row-action + .management-row-action {
+    margin-left: 0;
+  }
+
+  .management-table td[data-label='Action'] {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .management-table td[data-label='Action']::before {
+    flex-basis: 100%;
+  }
+
+  .management-balance {
+    font-size: 34px;
+  }
+}

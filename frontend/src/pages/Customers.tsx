@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { usePageStyles } from '../hooks/usePageStyles';
+import { useShopSearch } from '../hooks/useShopSearch';
 import { apiRequest } from '../services/api';
 import managementCss from '../styles/management-pages.css?raw';
 import { formatRupees } from '../utils/money';
@@ -43,6 +45,8 @@ export default function Customers() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const editingCustomer = editing === null ? null : customers.find((c) => c.id === editing) ?? null;
+  const [query, setQuery] = useState('');
+  const search = useShopSearch('customers', customers, query, (c) => [c.phone_number, c.whatsapp_number]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -260,9 +264,24 @@ export default function Customers() {
                 Registered customers <span>{customers.length} in directory</span>
               </h2>
               <span className="management-count" role="status">
-                {isLoading ? 'Loading…' : `${customers.length} total`}
+                {isLoading ? 'Loading…' : search.active ? `${search.visible.length} of ${customers.length}` : `${customers.length} total`}
               </span>
             </div>
+
+            <div className="management-search" role="search">
+              <span className="material-symbols-outlined" aria-hidden="true">search</span>
+              <label className="sr-only" htmlFor="customer-search">Search customers</label>
+              <input
+                className="management-input"
+                id="customer-search"
+                type="search"
+                placeholder="Search by name or phone"
+                value={query}
+                onChange={(event) => setQuery(event.currentTarget.value)}
+                autoComplete="off"
+              />
+            </div>
+            {search.error && <p className="management-notice management-notice-error" role="alert">{search.error}</p>}
 
             <div className="management-table-wrap">
               <table className="management-table management-table-customers">
@@ -277,7 +296,7 @@ export default function Customers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.map((customer) => (
+                  {search.visible.map((customer) => (
                     <tr key={customer.id}>
                       <td data-label="Name">{customer.name}</td>
                       <td data-label="Phone">{customer.phone_number || '—'}</td>
@@ -285,6 +304,9 @@ export default function Customers() {
                       <td data-label="Credit score">{customer.credit_score ?? '—'}</td>
                       <td data-label="Due" className="management-num">{formatRupees(toPaise(customer.outstanding_balance ?? 0))}</td>
                       <td data-label="Action">
+                        <Link className="management-row-action" to={`/customers/${customer.id}`} aria-label={`History and payments for ${customer.name}`}>
+                          History
+                        </Link>
                         <button className="management-row-action" type="button" onClick={() => edit(customer)} aria-label={`Edit ${customer.name}`}>
                           Edit
                         </button>
@@ -306,6 +328,9 @@ export default function Customers() {
                   ))}
                   {!isLoading && customers.length === 0 && (
                     <tr><td className="management-table-empty" colSpan={6}>No customers yet. Add your first customer here.</td></tr>
+                  )}
+                  {!isLoading && customers.length > 0 && search.active && !search.searching && search.visible.length === 0 && (
+                    <tr><td className="management-table-empty" colSpan={6}>No customer matches “{query.trim()}”.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { usePageStyles } from '../hooks/usePageStyles';
+import { useShopSearch } from '../hooks/useShopSearch';
 import { apiRequest } from '../services/api';
 import managementCss from '../styles/management-pages.css?raw';
 
@@ -63,6 +64,8 @@ export default function Products() {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const search = useShopSearch('products', products, query);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -215,9 +218,24 @@ export default function Products() {
               </h2>
             </div>
             <span className="management-count" role="status">
-              {isLoading ? 'Loading…' : `${products.length} total`}
+              {isLoading ? 'Loading…' : search.active ? `${search.visible.length} of ${products.length}` : `${products.length} total`}
             </span>
           </div>
+
+          <div className="management-search" role="search">
+            <span className="material-symbols-outlined" aria-hidden="true">search</span>
+            <label className="sr-only" htmlFor="product-search">Search products</label>
+            <input
+              className="management-input"
+              id="product-search"
+              type="search"
+              placeholder="Search products (e.g. namak, oil)"
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              autoComplete="off"
+            />
+          </div>
+          {search.error && <p className="management-notice management-notice-error" role="alert">{search.error}</p>}
 
           <div className="management-table-wrap">
             <table className="management-table management-table-products">
@@ -233,7 +251,7 @@ export default function Products() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((product) => (
+                {search.visible.map((product) => (
                   <tr key={product.id}>
                     <td data-label="Product">{product.name}</td>
                     <td data-label="Category">
@@ -266,6 +284,9 @@ export default function Products() {
                 ))}
                 {!isLoading && products.length === 0 && (
                   <tr><td className="management-table-empty" colSpan={7}>No products yet. Add your first product above.</td></tr>
+                )}
+                {!isLoading && products.length > 0 && search.active && !search.searching && search.visible.length === 0 && (
+                  <tr><td className="management-table-empty" colSpan={7}>No product matches “{query.trim()}”.</td></tr>
                 )}
               </tbody>
             </table>

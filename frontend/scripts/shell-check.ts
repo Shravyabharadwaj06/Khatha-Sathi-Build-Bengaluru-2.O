@@ -83,6 +83,8 @@ async function run(browser: Browser) {
     for (const to of MENU) {
       await page.click(`.cs-sidebar [data-menu="${to}"]`);
       await page.waitForURL(`**${to}`);
+      // The URL changes (pushState) before React re-renders the menu; wait for that render, then check strictly.
+      await page.waitForSelector(`.cs-sidebar [data-menu="${to}"][aria-current="page"]`, { timeout: 2000 }).catch(() => {});
       const active = await activeItems(page, '.cs-sidebar');
       if (path(page) !== to || active.length !== 1 || active[0] !== to) {
         allOk = false;

@@ -11,6 +11,7 @@ import ReportSent from './pages/ReportSent';
 import MyReports from './pages/MyReports';
 import Products from './pages/Products';
 import Customers from './pages/Customers';
+import CustomerHistory from './pages/CustomerHistory';
 import Assistant from './pages/Assistant';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import AppShell from './components/shell/AppShell';
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/assistant" element={<Assistant />} />
           <Route path="/products" element={<Products />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/customers/:customerId" element={<CustomerHistory />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/report-issue" element={<ReportIssue />} />
           <Route path="/report-sent" element={<ReportSent />} />

@@ -15,7 +15,7 @@ function MenuList({ pathname, onNavigate, idPrefix }: { pathname: string; onNavi
     <>
       <ul className="cs-menu" role="list">
         {MENU.map((item) => {
-          const active = pathname === item.to || !!item.also?.includes(pathname);
+          const active = pathname === item.to || pathname.startsWith(`${item.to}/`) || !!item.also?.includes(pathname);
           return (
             <li key={item.to}>
               <NavLink
