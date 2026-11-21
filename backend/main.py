@@ -64,6 +64,7 @@ app = FastAPI(title="Khatha Sathi API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1255,7 +1256,7 @@ def _entry_dict(row) -> dict:
         "customer_id": str(row["customer_id"]) if row["customer_id"] else None,
         "total_amount": amount,
         "paid_amount": paid,
-        "payment_method": payment_method,
+        "payment_method": payment_mode,
         "transaction_date": _iso(row["created_at"]),
         "status": "paid" if row["paid_paise"] >= row["amount_paise"] else "partial",
         "notes": row["note"],
@@ -2005,7 +2006,7 @@ def sales_report(
          where entry.shop_id = :shop_id
         """,
         {"shop_id": context.shop_id},
-    )
+       )
     sales = [row for row in rows if row["type"] == "sale"]
     reversed_sales = [
         row for row in rows
