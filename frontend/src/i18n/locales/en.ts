@@ -19,6 +19,15 @@ export const enTranslations = {
   'nav.storeSettings': 'Store Settings',
   'nav.terms': 'Terms and Conditions',
   'nav.privacy': 'Privacy Policy',
+  'nav.assistant': 'AI Assistant',
+  'nav.products': 'Products',
+  'nav.customers': 'Customers',
+  'nav.myReports': 'My reports',
+  'nav.reportIssue': 'Report an issue',
+  'nav.profile': 'Profile',
+  'nav.menu': 'Menu',
+  'nav.closeMenu': 'Close menu',
+  'nav.mainMenu': 'Main menu',
 
   // Landing Page
   'landing.hero.eyebrow': 'A little help for your shop',
