@@ -34,10 +34,20 @@ from supabase_client import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _cors_origins() -> list[str]:
+    """Allowed browser origins, from CORS_ORIGINS (comma-separated). Defaults to the Vite dev server."""
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:5173", "http://127.0.0.1:5173"]
+    return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+
+
 app = FastAPI(title="Khatha Sathi API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
