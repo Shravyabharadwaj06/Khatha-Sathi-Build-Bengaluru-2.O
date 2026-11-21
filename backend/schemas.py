@@ -1,54 +1,61 @@
 from datetime import date
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field
-
-
-class ProductBase(BaseModel):
-    name: str = Field(min_length=1)
-    category: Optional[str] = None
-    selling_price: float = Field(ge=0)
-    purchase_price: Optional[float] = Field(default=0, ge=0)
-    stock_quantity: float = Field(default=0, ge=0)
-    unit: Optional[str] = "pcs"
-    expiry_date: Optional[date] = None
-    low_stock_threshold: float = Field(default=5, ge=0)
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ProductCreate(ProductBase):
+# ---------------------------------------------------------------------------
+# Request bodies for products, customers and OTP.
+# They describe exactly the fields the endpoints read. Numbers arrive as JSON
+# numbers or form strings ("12.50", "" for empty); main.py converts them to
+# paise / quantities with Decimal, so no float money is ever used.
+# Unknown keys are ignored so older frontends keep working.
+# ---------------------------------------------------------------------------
+NumberLike = Optional[Union[Decimal, str]]
+
+
+class _Body(BaseModel):
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+
+class ProductCreate(_Body):
+    name: Optional[str] = Field(default=None, max_length=120)
+    product_name: Optional[str] = Field(default=None, max_length=120)  # old field name
+    category: Optional[str] = Field(default=None, max_length=60)
+    selling_price: NumberLike = None
+    purchase_price: NumberLike = None
+    stock_quantity: NumberLike = None
+    unit: Optional[str] = Field(default=None, max_length=20)
+    expiry_date: Optional[Union[date, str]] = None
+    low_stock_threshold: NumberLike = None
+
+
+class ProductUpdate(ProductCreate):
     pass
 
 
-class ProductUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1)
-    category: Optional[str] = None
-    selling_price: Optional[float] = Field(default=None, ge=0)
-    purchase_price: Optional[float] = Field(default=None, ge=0)
-    stock_quantity: Optional[float] = Field(default=None, ge=0)
-    unit: Optional[str] = None
-    expiry_date: Optional[date] = None
-    low_stock_threshold: Optional[float] = Field(default=None, ge=0)
+class CustomerCreate(_Body):
+    name: Optional[str] = Field(default=None, max_length=120)
+    customer_name: Optional[str] = Field(default=None, max_length=120)  # old field name
+    phone_number: Optional[str] = Field(default=None, max_length=20)
+    whatsapp_number: Optional[str] = Field(default=None, max_length=20)
+    credit_score: NumberLike = None
+    # Opening balance from the paper khata, accepted ONLY when the customer is created.
+    outstanding_balance: NumberLike = None
 
 
-class CustomerBase(BaseModel):
-    name: str = Field(min_length=1)
-    phone_number: Optional[str] = None
-    whatsapp_number: Optional[str] = None
-    outstanding_balance: float = Field(default=0, ge=0)
-    credit_score: Optional[float] = Field(default=0, ge=0)
-
-
-class CustomerCreate(CustomerBase):
+class CustomerUpdate(CustomerCreate):
     pass
 
 
-class CustomerUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1)
-    phone_number: Optional[str] = None
-    whatsapp_number: Optional[str] = None
-    outstanding_balance: Optional[float] = Field(default=None, ge=0)
-    credit_score: Optional[float] = Field(default=None, ge=0)
+class OtpSendInput(_Body):
+    phone: str = Field(min_length=1, max_length=20)
+
+
+class OtpVerifyInput(_Body):
+    phone: str = Field(min_length=1, max_length=20)
+    otp: str = Field(min_length=1, max_length=10)
 
 
 class TransactionItemInput(BaseModel):

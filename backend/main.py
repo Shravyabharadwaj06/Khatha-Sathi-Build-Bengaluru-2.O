@@ -18,7 +18,18 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from database import get_db
-from schemas import PaymentCreate, ProfileInput, TransactionCreate, VoiceCommandInput
+from schemas import (
+    CustomerCreate,
+    CustomerUpdate,
+    OtpSendInput,
+    OtpVerifyInput,
+    PaymentCreate,
+    ProductCreate,
+    ProductUpdate,
+    ProfileInput,
+    TransactionCreate,
+    VoiceCommandInput,
+)
 from supabase_client import (
     SupabaseNotConfigured,
     SupabaseRequestError,
@@ -343,7 +354,8 @@ def readiness(db: Session = Depends(get_db)):
 
 
 @app.post("/auth/otp/send")
-def send_otp(payload: dict):
+def send_otp(body: OtpSendInput):
+    payload = body.model_dump()
     phone = _normalize_phone(str(payload.get("phone", "")))
     code = _get_otp_code()
     _sent_otps[phone] = code
@@ -352,7 +364,8 @@ def send_otp(payload: dict):
 
 
 @app.post("/auth/otp/verify")
-def verify_otp(payload: dict):
+def verify_otp(body: OtpVerifyInput):
+    payload = body.model_dump()
     phone = _normalize_phone(str(payload.get("phone", "")))
     otp = str(payload.get("otp", "")).strip()
     verified = _sent_otps.get(phone) == otp and len(otp) == 6
@@ -727,10 +740,11 @@ def get_products(
 
 @app.post("/products")
 def add_product(
-    payload: dict,
+    body: ProductCreate,
     context: AuthContext = Depends(current_auth_context),
     db: Session = Depends(get_db),
 ):
+    payload = body.model_dump(exclude_unset=True)
     name = str(payload.get("name") or payload.get("product_name") or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="Product name is required.")
@@ -791,10 +805,11 @@ def add_product(
 @app.put("/products/{product_id}")
 def update_product(
     product_id: uuid.UUID,
-    payload: dict,
+    body: ProductUpdate,
     context: AuthContext = Depends(current_auth_context),
     db: Session = Depends(get_db),
 ):
+    payload = body.model_dump(exclude_unset=True)
     identifier = str(product_id)
     existing = _product_row(db, context.shop_id, identifier)
     if existing is None:
@@ -996,10 +1011,11 @@ def get_customers(
 
 @app.post("/customers")
 def add_customer(
-    payload: dict,
+    body: CustomerCreate,
     context: AuthContext = Depends(current_auth_context),
     db: Session = Depends(get_db),
 ):
+    payload = body.model_dump(exclude_unset=True)
     name = str(payload.get("name") or payload.get("customer_name") or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="Customer name is required.")
@@ -1052,10 +1068,11 @@ def add_customer(
 @app.put("/customers/{customer_id}")
 def update_customer(
     customer_id: uuid.UUID,
-    payload: dict,
+    body: CustomerUpdate,
     context: AuthContext = Depends(current_auth_context),
     db: Session = Depends(get_db),
 ):
+    payload = body.model_dump(exclude_unset=True)
     identifier = str(customer_id)
     existing = _customer_row(db, context.shop_id, identifier)
     if existing is None:
