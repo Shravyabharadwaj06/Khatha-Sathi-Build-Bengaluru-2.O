@@ -13,6 +13,7 @@
     "test:visual": "npm run build && tsx scripts/visual-compare.ts && tsx scripts/interaction-check.ts"
   },
   "dependencies": {
+    "lucide-react": "^1.77.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "6.28.0"
