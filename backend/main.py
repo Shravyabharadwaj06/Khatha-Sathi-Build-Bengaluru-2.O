@@ -781,6 +781,58 @@ def get_products(
     return [_product_dict(row) for row in rows]
 
 
+def _record_product(
+    db: Session,
+    context: AuthContext,
+    *,
+    name: str,
+    selling_price_paise: int | None,
+    purchase_price_paise: int | None = None,
+    category: str | None = None,
+    unit: str = "pcs",
+    expiry_date=None,
+    stock_qty: Decimal = Decimal("0"),
+    threshold: Decimal = Decimal("5"),
+) -> str:
+    """Creates a product (+ opening stock movement) WITHOUT committing. selling_price_paise may be
+    None (price not known yet, e.g. added by voice). Used by POST /products and POST /voice/confirm."""
+    _set_actor(db, context.user_id)
+    row = db.execute(
+        text(
+            """
+            insert into public.products
+                (shop_id, name, category, selling_price_paise, purchase_price_paise,
+                 unit, expiry_date, low_stock_threshold)
+            values
+                (:shop_id, :name, :category, :selling_price, :purchase_price,
+                 :unit, :expiry_date, :threshold)
+            returning id
+            """
+        ),
+        {
+            "shop_id": context.shop_id,
+            "name": name,
+            "category": category,
+            "selling_price": selling_price_paise,
+            "purchase_price": purchase_price_paise,
+            "unit": unit or "pcs",
+            "expiry_date": expiry_date,
+            "threshold": threshold,
+        },
+    ).mappings().one()
+    product_id = str(row["id"])
+    if stock_qty:
+        _insert_stock_movement(
+            db,
+            shop_id=context.shop_id,
+            product_id=product_id,
+            quantity_change=stock_qty,
+            reason="opening",
+            note="Initial stock",
+        )
+    return product_id
+
+
 @app.post("/products")
 def add_product(
     body: ProductCreate,
@@ -801,40 +853,18 @@ def add_product(
     stock_qty = _nonnegative_quantity(payload.get("stock_quantity", 0), "stock_quantity")
     threshold = _nonnegative_quantity(payload.get("low_stock_threshold", 5), "low_stock_threshold")
     try:
-        _set_actor(db, context.user_id)
-        row = db.execute(
-            text(
-                """
-                insert into public.products
-                    (shop_id, name, category, selling_price_paise, purchase_price_paise,
-                     unit, expiry_date, low_stock_threshold)
-                values
-                    (:shop_id, :name, :category, :selling_price, :purchase_price,
-                     :unit, :expiry_date, :threshold)
-                returning id
-                """
-            ),
-            {
-                "shop_id": context.shop_id,
-                "name": name,
-                "category": str(payload.get("category") or "").strip() or None,
-                "selling_price": selling_price,
-                "purchase_price": purchase_price,
-                "unit": str(payload.get("unit") or "pcs").strip() or "pcs",
-                "expiry_date": parse_date(payload.get("expiry_date")),
-                "threshold": threshold,
-            },
-        ).mappings().one()
-        product_id = str(row["id"])
-        if stock_qty:
-            _insert_stock_movement(
-                db,
-                shop_id=context.shop_id,
-                product_id=product_id,
-                quantity_change=stock_qty,
-                reason="opening",
-                note="Initial stock",
-            )
+        product_id = _record_product(
+            db,
+            context,
+            name=name,
+            category=str(payload.get("category") or "").strip() or None,
+            selling_price_paise=selling_price,
+            purchase_price_paise=purchase_price,
+            unit=str(payload.get("unit") or "pcs").strip() or "pcs",
+            expiry_date=parse_date(payload.get("expiry_date")),
+            stock_qty=stock_qty,
+            threshold=threshold,
+        )
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -1374,6 +1404,122 @@ def _create_payment_entry(
     return _entry_dict(row)
 
 
+def _record_sale(
+    db: Session,
+    context: AuthContext,
+    *,
+    customer_id: str | None,
+    items: list[tuple[str, Decimal]],
+    method: str,
+    paid_amount=None,
+    note: str | None = None,
+    source: str = "manual",
+    transcript: str | None = None,
+) -> tuple[str, int, int]:
+    """Records one sale (entry + items + stock out) WITHOUT committing. Returns (entry_id, total, paid).
+
+    The one place that writes a sale: used by POST /transactions and POST /voice/confirm.
+    Totals are computed here, in code, from DB prices; the database re-checks them."""
+    if not items:
+        raise HTTPException(status_code=422, detail="At least one item is required.")
+    customer = _customer_row(db, context.shop_id, customer_id) if customer_id else None
+    if customer_id and customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+
+    prepared_items = []
+    total_paise = 0
+    for raw_product_id, raw_quantity in items:
+        product_id = _to_uuid(raw_product_id, "product_id")
+        product = _product_row(db, context.shop_id, product_id)
+        if product is None:
+            raise HTTPException(status_code=404, detail=f"Product {product_id} not found.")
+        if product["selling_price_paise"] is None:
+            raise HTTPException(status_code=422, detail=f"Product {product['name']} has no selling price.")
+        quantity = _quantity(raw_quantity)
+        unit_price = int(product["selling_price_paise"])
+        line_total = int(
+            (quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        )
+        total_paise += line_total
+        prepared_items.append((product, product_id, quantity, unit_price, line_total))
+
+    method = method.strip().lower()
+    if method not in {"cash", "upi", "credit", "udhaar"}:
+        raise HTTPException(status_code=422, detail="payment_method must be cash, upi, or credit.")
+    default_paid = Decimal("0") if method in {"credit", "udhaar"} else Decimal(total_paise) / 100
+    paid_paise = _paise(paid_amount, "paid_amount", default=default_paid)
+    if paid_paise > total_paise:
+        raise HTTPException(status_code=422, detail="paid_amount cannot exceed the sale total.")
+    if customer_id is None and paid_paise != total_paise:
+        raise HTTPException(status_code=422, detail="Walk-in sales must be fully paid.")
+    if paid_paise == total_paise:
+        if method in {"credit", "udhaar"}:
+            raise HTTPException(status_code=422, detail="A fully paid sale must use cash or upi.")
+        payment_mode = method
+    elif paid_paise == 0:
+        payment_mode = "udhaar"
+    else:
+        payment_mode = "partial"
+
+    _set_actor(db, context.user_id)
+    entry = db.execute(
+        text(
+            """
+            insert into public.ledger_entries
+                (shop_id, customer_id, type, amount_paise, paid_paise,
+                 payment_mode, source, transcript, note)
+            values
+                (:shop_id, :customer_id, 'sale', :amount, :paid,
+                 :payment_mode, :source, :transcript, :note)
+            returning id
+            """
+        ),
+        {
+            "shop_id": context.shop_id,
+            "customer_id": customer_id,
+            "amount": total_paise,
+            "paid": paid_paise,
+            "payment_mode": payment_mode,
+            "source": source,
+            "transcript": transcript,
+            "note": note,
+        },
+    ).mappings().one()
+    entry_id = str(entry["id"])
+    for product, product_id, quantity, unit_price, line_total in prepared_items:
+        db.execute(
+            text(
+                """
+                insert into public.ledger_items
+                    (shop_id, entry_id, product_id, product_name_snapshot,
+                     qty, unit, unit_price_paise, line_total_paise)
+                values
+                    (:shop_id, :entry_id, :product_id, :product_name,
+                     :quantity, :unit, :unit_price, :line_total)
+                """
+            ),
+            {
+                "shop_id": context.shop_id,
+                "entry_id": entry_id,
+                "product_id": product_id,
+                "product_name": product["name"],
+                "quantity": quantity,
+                "unit": product["unit"],
+                "unit_price": unit_price,
+                "line_total": line_total,
+            },
+        )
+        _insert_stock_movement(
+            db,
+            shop_id=context.shop_id,
+            product_id=product_id,
+            quantity_change=-quantity,
+            reason="sale",
+            entry_id=entry_id,
+        )
+    return entry_id, total_paise, paid_paise
+
+
 @app.post("/transactions")
 def create_transaction(
     payload: TransactionCreate,
@@ -1394,101 +1540,16 @@ def create_transaction(
         raise HTTPException(status_code=422, detail="At least one item is required.")
 
     customer_id = _to_uuid(payload.customer_id, "customer_id") if payload.customer_id else None
-    customer = _customer_row(db, context.shop_id, customer_id) if customer_id else None
-    if customer_id and customer is None:
-        raise HTTPException(status_code=404, detail="Customer not found.")
-
-    prepared_items = []
-    total_paise = 0
-    for item in payload.items:
-        product_id = _to_uuid(item.product_id, "product_id")
-        product = _product_row(db, context.shop_id, product_id)
-        if product is None:
-            raise HTTPException(status_code=404, detail=f"Product {product_id} not found.")
-        if product["selling_price_paise"] is None:
-            raise HTTPException(status_code=422, detail=f"Product {product['name']} has no selling price.")
-        quantity = _quantity(item.quantity)
-        unit_price = int(product["selling_price_paise"])
-        line_total = int(
-            (quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        )
-        total_paise += line_total
-        prepared_items.append((product, product_id, quantity, unit_price, line_total))
-
-    method = payload.payment_method.strip().lower()
-    if method not in {"cash", "upi", "credit", "udhaar"}:
-        raise HTTPException(status_code=422, detail="payment_method must be cash, upi, or credit.")
-    default_paid = Decimal("0") if method in {"credit", "udhaar"} else Decimal(total_paise) / 100
-    paid_paise = _paise(payload.paid_amount, "paid_amount", default=default_paid)
-    if paid_paise > total_paise:
-        raise HTTPException(status_code=422, detail="paid_amount cannot exceed the sale total.")
-    if customer_id is None and paid_paise != total_paise:
-        raise HTTPException(status_code=422, detail="Walk-in sales must be fully paid.")
-    if paid_paise == total_paise:
-        if method in {"credit", "udhaar"}:
-            raise HTTPException(status_code=422, detail="A fully paid sale must use cash or upi.")
-        payment_mode = method
-    elif paid_paise == 0:
-        payment_mode = "udhaar"
-    else:
-        payment_mode = "partial"
-
     try:
-        _set_actor(db, context.user_id)
-        entry = db.execute(
-            text(
-                """
-                insert into public.ledger_entries
-                    (shop_id, customer_id, type, amount_paise, paid_paise,
-                     payment_mode, source, note)
-                values
-                    (:shop_id, :customer_id, 'sale', :amount, :paid,
-                     :payment_mode, 'manual', :note)
-                returning id, shop_id, customer_id, type, amount_paise, paid_paise,
-                          due_delta_paise, payment_mode, note, created_at
-                """
-            ),
-            {
-                "shop_id": context.shop_id,
-                "customer_id": customer_id,
-                "amount": total_paise,
-                "paid": paid_paise,
-                "payment_mode": payment_mode,
-                "note": payload.notes,
-            },
-        ).mappings().one()
-        entry_id = str(entry["id"])
-        for product, product_id, quantity, unit_price, line_total in prepared_items:
-            db.execute(
-                text(
-                    """
-                    insert into public.ledger_items
-                        (shop_id, entry_id, product_id, product_name_snapshot,
-                         qty, unit, unit_price_paise, line_total_paise)
-                    values
-                        (:shop_id, :entry_id, :product_id, :product_name,
-                         :quantity, :unit, :unit_price, :line_total)
-                    """
-                ),
-                {
-                    "shop_id": context.shop_id,
-                    "entry_id": entry_id,
-                    "product_id": product_id,
-                    "product_name": product["name"],
-                    "quantity": quantity,
-                    "unit": product["unit"],
-                    "unit_price": unit_price,
-                    "line_total": line_total,
-                },
-            )
-            _insert_stock_movement(
-                db,
-                shop_id=context.shop_id,
-                product_id=product_id,
-                quantity_change=-quantity,
-                reason="sale",
-                entry_id=entry_id,
-            )
+        entry_id, total_paise, paid_paise = _record_sale(
+            db,
+            context,
+            customer_id=customer_id,
+            items=[(item.product_id, item.quantity) for item in payload.items],
+            method=payload.payment_method,
+            paid_amount=payload.paid_amount,
+            note=payload.notes,
+        )
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -1509,14 +1570,10 @@ def create_transaction(
     }
 
 
-@app.post("/transactions/{transaction_id}/reverse")
-def reverse_transaction(
-    transaction_id: uuid.UUID,
-    context: AuthContext = Depends(current_auth_context),
-    db: Session = Depends(get_db),
-):
-    identifier = str(transaction_id)
-    original = _entry_row(db, context.shop_id, identifier)
+def _record_reversal(db: Session, context: AuthContext, entry_id: str, *, source: str = "manual") -> str:
+    """Undo = a new 'reversal' row pointing at the original (never a delete), plus stock back.
+    Does NOT commit. Used by POST /transactions/{id}/reverse and POST /voice/confirm."""
+    original = _entry_row(db, context.shop_id, entry_id)
     if original is None:
         raise HTTPException(status_code=404, detail="Transaction not found.")
     if original["type"] == "reversal":
@@ -1527,40 +1584,51 @@ def reverse_transaction(
         select product_id, qty from public.ledger_items
          where shop_id = :shop_id and entry_id = :entry_id
         """,
-        {"shop_id": context.shop_id, "entry_id": identifier},
+        {"shop_id": context.shop_id, "entry_id": entry_id},
     )
+    _set_actor(db, context.user_id)
+    row = db.execute(
+        text(
+            """
+            insert into public.ledger_entries
+                (shop_id, customer_id, type, amount_paise, paid_paise,
+                 due_delta_paise, ref_entry_id, source, note)
+            values
+                (:shop_id, :customer_id, 'reversal', 0, 0, 0, :entry_id, :source, 'Transaction reversal')
+            returning id
+            """
+        ),
+        {
+            "shop_id": context.shop_id,
+            "customer_id": original["customer_id"],
+            "entry_id": entry_id,
+            "source": source,
+        },
+    ).mappings().one()
+    reversal_id = str(row["id"])
+    if original["type"] == "sale":
+        for item in items:
+            if item["product_id"]:
+                _insert_stock_movement(
+                    db,
+                    shop_id=context.shop_id,
+                    product_id=str(item["product_id"]),
+                    quantity_change=Decimal(str(item["qty"])),
+                    reason="reversal",
+                    entry_id=reversal_id,
+                )
+    return reversal_id
+
+
+@app.post("/transactions/{transaction_id}/reverse")
+def reverse_transaction(
+    transaction_id: uuid.UUID,
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    identifier = str(transaction_id)
     try:
-        _set_actor(db, context.user_id)
-        row = db.execute(
-            text(
-                """
-                insert into public.ledger_entries
-                    (shop_id, customer_id, type, amount_paise, paid_paise,
-                     due_delta_paise, ref_entry_id, source, note)
-                values
-                    (:shop_id, :customer_id, 'reversal', 0, 0, 0, :entry_id, 'manual', 'Transaction reversal')
-                returning id, shop_id, customer_id, type, amount_paise, paid_paise,
-                          due_delta_paise, payment_mode, note, created_at
-                """
-            ),
-            {
-                "shop_id": context.shop_id,
-                "customer_id": original["customer_id"],
-                "entry_id": identifier,
-            },
-        ).mappings().one()
-        reversal_id = str(row["id"])
-        if original["type"] == "sale":
-            for item in items:
-                if item["product_id"]:
-                    _insert_stock_movement(
-                        db,
-                        shop_id=context.shop_id,
-                        product_id=str(item["product_id"]),
-                        quantity_change=Decimal(str(item["qty"])),
-                        reason="reversal",
-                        entry_id=reversal_id,
-                    )
+        reversal_id = _record_reversal(db, context, identifier)
         db.commit()
     except IntegrityError as error:
         db.rollback()
