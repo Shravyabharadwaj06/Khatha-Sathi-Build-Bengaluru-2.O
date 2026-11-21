@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -73,3 +73,22 @@ class PaymentCreate(BaseModel):
 
 class VoiceCommandInput(BaseModel):
     text: str = Field(min_length=1)
+
+
+class ProfileInput(BaseModel):
+    shopName: str = Field(min_length=1)
+    ownerName: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
+    businessDomain: str = Field(min_length=1)
+    gstNumber: str = ""
+    fssaiNumber: str = ""
+    address: str = Field(min_length=1)
+    avatarUrl: str = ""
+    primaryLanguage: str
+    secondaryLanguage: str
+    spokenReplies: bool
+    voiceSpeed: Literal["Slow", "Normal", "Fast"]
+    voiceVolume: int = Field(ge=0, le=100)
+    dailyLedgerPdf: bool
+    lowStockAlert: bool
+    paymentReminder: bool

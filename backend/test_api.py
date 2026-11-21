@@ -79,6 +79,92 @@ def test_signup_login_me_logout():
     assert logout.status_code == 200
 
 
+def test_profile_update_persists_to_auth_me():
+    import uuid
+
+    phone = str(uuid.uuid4().int)[-10:]
+    signup = client.post("/auth/signup", json={
+        "email": f"profile-{uuid.uuid4().hex}@example.com",
+        "name": "Profile Owner",
+        "phone": phone,
+        "password": "12345678",
+        "city": "Bengaluru",
+        "businessDomain": "Grocery",
+    })
+    token = signup.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    updated = client.put("/auth/profile", headers=headers, json={
+        "shopName": "Lakshmi Stores",
+        "ownerName": "Lakshmi",
+        "phone": phone,
+        "businessDomain": "Grocery",
+        "gstNumber": "29AAAAA0000A1Z5",
+        "fssaiNumber": "",
+        "address": "Main Bazaar Road",
+        "avatarUrl": "",
+        "primaryLanguage": "Kannada",
+        "secondaryLanguage": "Hindi",
+        "spokenReplies": True,
+        "voiceSpeed": "Normal",
+        "voiceVolume": 80,
+        "dailyLedgerPdf": True,
+        "lowStockAlert": True,
+        "paymentReminder": True,
+    })
+
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Lakshmi"
+    assert updated.json()["shopName"] == "Lakshmi Stores"
+    assert updated.json()["gstNumber"] == "29AAAAA0000A1Z5"
+    assert client.get("/auth/me", headers=headers).json()["address"] == "Main Bazaar Road"
+
+
+def test_support_report_upload_and_listing_require_authentication():
+    import json
+    import uuid
+
+    signup = client.post("/auth/signup", json={
+        "email": f"report-{uuid.uuid4().hex}@example.com",
+        "name": "Report Owner",
+        "phone": str(uuid.uuid4().int)[-10:],
+        "password": "12345678",
+        "city": "Bengaluru",
+        "businessDomain": "Grocery",
+    })
+    headers = {"Authorization": f"Bearer {signup.json()['token']}"}
+
+    created = client.post(
+        "/support/reports",
+        headers=headers,
+        data={
+            "categories": json.dumps(["voice", "stock"]),
+            "description": "Kannada voice entry did not save.",
+            "contactAllowed": "true",
+        },
+        files=[("attachments", ("stock.png", b"sample-image", "image/png"))],
+    )
+
+    assert created.status_code == 200
+    assert created.json()["categories"] == ["voice", "stock"]
+    assert created.json()["attachments"] == [{"name": "stock.png", "type": "image/png", "size": 12}]
+    listed = client.get("/support/reports", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["reference"] == created.json()["reference"]
+    assert client.get("/support/reports").status_code == 401
+
+    other_signup = client.post("/auth/signup", json={
+        "email": f"other-{uuid.uuid4().hex}@example.com",
+        "name": "Other Owner",
+        "phone": str(uuid.uuid4().int)[-10:],
+        "password": "12345678",
+        "city": "Bengaluru",
+        "businessDomain": "Grocery",
+    })
+    other_headers = {"Authorization": f"Bearer {other_signup.json()['token']}"}
+    assert client.get("/support/reports", headers=other_headers).json() == []
+
+
 def test_sale_purchase_payment_and_delete():
     product = client.post("/products", json={
         "name": "Sugar",

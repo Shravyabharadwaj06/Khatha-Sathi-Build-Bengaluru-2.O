@@ -17,6 +17,10 @@ export interface User {
   phone: string; // 10 digits, no +91
   city: string;
   businessDomain: string;
+  shopName?: string;
+  gstNumber?: string;
+  fssaiNumber?: string;
+  address?: string;
 }
 
 export interface Session {
@@ -40,6 +44,42 @@ export interface LoginInput {
   password: string;
 }
 
+export interface ProfileInput {
+  shopName: string;
+  ownerName: string;
+  phone: string;
+  businessDomain: string;
+  gstNumber: string;
+  fssaiNumber: string;
+  address: string;
+  avatarUrl: string;
+  primaryLanguage: string;
+  secondaryLanguage: string;
+  spokenReplies: boolean;
+  voiceSpeed: 'Slow' | 'Normal' | 'Fast';
+  voiceVolume: number;
+  dailyLedgerPdf: boolean;
+  lowStockAlert: boolean;
+  paymentReminder: boolean;
+}
+
+export interface IssueReportInput {
+  categories: string[];
+  description: string;
+  contactAllowed: boolean;
+  attachments: File[];
+}
+
+export interface IssueReport {
+  id: string;
+  reference: string;
+  categories: string[];
+  description: string;
+  contactAllowed: boolean;
+  attachments: Array<{ name: string; type: string; size: number }>;
+  createdAt: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -59,10 +99,11 @@ const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').
 // ---------------------------------------------------------------------------
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getSession()?.token;
+  const isMultipart = init.body instanceof FormData;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(!isMultipart ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
@@ -90,6 +131,16 @@ const real = {
   login: (input: LoginInput) => request<Session>('/auth/login', { method: 'POST', body: JSON.stringify(input) }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   getCurrentUser: () => request<User>('/auth/me'),
+  updateProfile: (input: ProfileInput) => request<User>('/auth/profile', { method: 'PUT', body: JSON.stringify(input) }),
+  createIssueReport(input: IssueReportInput) {
+    const body = new FormData();
+    body.set('categories', JSON.stringify(input.categories));
+    body.set('description', input.description);
+    body.set('contactAllowed', String(input.contactAllowed));
+    input.attachments.forEach((file) => body.append('attachments', file, file.name));
+    return request<IssueReport>('/support/reports', { method: 'POST', body });
+  },
+  listIssueReports: () => request<IssueReport[]>('/support/reports'),
 };
 
 // ---------------------------------------------------------------------------
@@ -97,6 +148,7 @@ const real = {
 // ---------------------------------------------------------------------------
 const MOCK_DELAY_MS = 400;
 const MOCK_USERS_KEY = 'chotu.mock.users';
+const MOCK_ISSUE_REPORTS_KEY = 'chotu.mock.issue-reports';
 const delay = <T,>(value: T) => new Promise<T>((r) => setTimeout(() => r(value), MOCK_DELAY_MS));
 
 type MockUser = User & { password: string };
@@ -124,6 +176,14 @@ function readUsers(): MockUser[] {
 function writeUser(user: MockUser) {
   const list = readUsers().filter((u) => u.id !== DEMO_USER.id);
   localStorage.setItem(MOCK_USERS_KEY, JSON.stringify([...list, user]));
+}
+
+function readIssueReports(): IssueReport[] {
+  try {
+    return JSON.parse(localStorage.getItem(MOCK_ISSUE_REPORTS_KEY) ?? '[]') as IssueReport[];
+  } catch {
+    return [];
+  }
 }
 
 const sentOtps = new Set<string>();
@@ -176,6 +236,41 @@ const mock = {
     if (!session) throw new ApiError('Not logged in.');
     return delay(session.user);
   },
+  async updateProfile(input: ProfileInput) {
+    const session = getSession();
+    if (!session) throw new ApiError('Not logged in.');
+    const updated: User = {
+      ...session.user,
+      name: input.ownerName,
+      phone: input.phone.replace(/\D/g, '').slice(-10),
+      businessDomain: input.businessDomain,
+      shopName: input.shopName,
+      gstNumber: input.gstNumber,
+      fssaiNumber: input.fssaiNumber,
+      address: input.address,
+    };
+    const users = readUsers();
+    const stored = users.find((user) => user.id === updated.id);
+    if (stored && stored.id !== DEMO_USER.id) writeUser({ ...stored, ...updated });
+    return delay(updated);
+  },
+  async createIssueReport(input: IssueReportInput) {
+    const reports = readIssueReports();
+    const report: IssueReport = {
+      id: crypto.randomUUID(),
+      reference: `CH-${2041 + reports.length}`,
+      categories: input.categories,
+      description: input.description.trim(),
+      contactAllowed: input.contactAllowed,
+      attachments: input.attachments.map(({ name, type, size }) => ({ name, type, size })),
+      createdAt: new Date().toISOString(),
+    };
+    localStorage.setItem(MOCK_ISSUE_REPORTS_KEY, JSON.stringify([report, ...reports]));
+    return delay(report);
+  },
+  async listIssueReports() {
+    return delay(readIssueReports());
+  },
 };
 
 const impl = USE_MOCK_API ? mock : real;
@@ -186,3 +281,6 @@ export const signup = (input: SignupInput): Promise<Session> => impl.signup(inpu
 export const login = (input: LoginInput): Promise<Session> => impl.login(input);
 export const logout = (): Promise<void> => impl.logout();
 export const getCurrentUser = (): Promise<User> => impl.getCurrentUser();
+export const updateProfile = (input: ProfileInput): Promise<User> => impl.updateProfile(input);
+export const createIssueReport = (input: IssueReportInput): Promise<IssueReport> => impl.createIssueReport(input);
+export const listIssueReports = (): Promise<IssueReport[]> => impl.listIssueReports();

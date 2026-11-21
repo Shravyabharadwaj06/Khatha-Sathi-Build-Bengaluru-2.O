@@ -4,7 +4,11 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Home from './pages/Home';
+import Profile from './pages/Profile';
 import Legal from './pages/Legal';
+import ReportIssue from './pages/ReportIssue';
+import ReportSent from './pages/ReportSent';
+import MyReports from './pages/MyReports';
 import Products from './pages/Products';
 import Customers from './pages/Customers';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -58,6 +62,10 @@ export default function App() {
 
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/report-issue" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
+        <Route path="/report-sent" element={<ProtectedRoute><ReportSent /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
 
         <Route path="/terms" element={<Legal kind="terms" />} />
         <Route path="/privacy" element={<Legal kind="privacy" />} />

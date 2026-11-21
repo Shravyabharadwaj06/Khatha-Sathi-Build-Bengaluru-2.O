@@ -2,5 +2,6 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 pydantic
+python-multipart
 pytest
 httpx
