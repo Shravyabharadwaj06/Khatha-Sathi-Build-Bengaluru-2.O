@@ -659,3 +659,7 @@ body.management-body {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.management-row-action + .management-row-action {
+  margin-left: 8px;
+}

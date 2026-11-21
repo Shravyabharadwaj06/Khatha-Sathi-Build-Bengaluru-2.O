@@ -106,6 +106,17 @@ export default function Customers() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /** Opens WhatsApp with a reminder pre-filled from the backend (balance from the ledger). Nothing is sent automatically. */
+  const remind = async (customer: Customer) => {
+    setMessage('');
+    try {
+      const { url } = await apiRequest<{ url: string }>(`/customers/${customer.id}/whatsapp`);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not prepare the WhatsApp reminder.');
+    }
+  };
+
   const cancelEdit = () => {
     setEditing(null);
     setForm(emptyCustomerForm());
@@ -273,6 +284,16 @@ export default function Customers() {
                         <button className="management-row-action" type="button" onClick={() => edit(customer)} aria-label={`Edit ${customer.name}`}>
                           Edit
                         </button>
+                        {customer.outstanding_balance > 0 && (
+                          <button
+                            className="management-row-action"
+                            type="button"
+                            onClick={() => void remind(customer)}
+                            aria-label={`Send a WhatsApp reminder to ${customer.name}`}
+                          >
+                            WhatsApp
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

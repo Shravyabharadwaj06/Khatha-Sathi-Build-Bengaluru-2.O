@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+import reminders
 from database import get_db
 from schemas import (
     CustomerCreate,
@@ -1636,6 +1637,49 @@ def get_payments(
         values,
     )
     return [_entry_dict(row) for row in rows]
+
+
+@app.get("/customers/{customer_id}/whatsapp")
+def customer_whatsapp_reminder(
+    customer_id: uuid.UUID,
+    tone: str = "soft",
+    language: str = "en",
+    context: AuthContext = Depends(current_auth_context),
+    db: Session = Depends(get_db),
+):
+    """A payment-reminder message + wa.me link built from DB values. Nothing is sent automatically."""
+    identifier = str(customer_id)
+    customer = _customer_row(db, context.shop_id, identifier)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+    balance = int(customer["balance_paise"] or 0)
+    if balance <= 0:
+        raise HTTPException(status_code=422, detail=f"Nothing is due from {customer['name']}.")
+    number = reminders.whatsapp_number(customer["whatsapp"], customer["phone"])
+    if number is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No 10-digit WhatsApp or phone number is saved for {customer['name']}.",
+            headers={"X-Error-Field": "whatsapp_number"},
+        )
+    shop = _one(db, "select shop_name from public.shops where id = :shop_id", {"shop_id": context.shop_id})
+    tone = tone if tone in reminders.TONES else "soft"
+    message = reminders.reminder_text(
+        name=customer["name"],
+        shop=(shop or {}).get("shop_name") or "",
+        amount_text=_format_rupees(balance),
+        tone=tone,
+        language=language,
+    )
+    return {
+        "customer_id": identifier,
+        "phone": number,
+        "balance_paise": balance,
+        "outstanding_balance": _rupees(balance),
+        "tone": tone,
+        "message": message,
+        "url": reminders.whatsapp_url(number, message),
+    }
 
 
 @app.get("/customers/{customer_id}/ledger")

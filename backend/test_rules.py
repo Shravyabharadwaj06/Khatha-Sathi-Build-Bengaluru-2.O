@@ -155,3 +155,35 @@ def test_payment_more_than_due_is_refused(monkeypatch):
     assert refused.value.status_code == 422
     assert refused.value.detail == "Payment is more than the due amount (₹840)."
     assert not db.inserted
+
+
+# --- WhatsApp reminder (port of Rashmitha's idea) ---------------------------------
+import reminders
+
+
+def test_whatsapp_number_prefers_whatsapp_then_phone():
+    assert reminders.whatsapp_number("+91 98860 54321", "9000000000") == "9886054321"
+    assert reminders.whatsapp_number(None, "98450-12345") == "9845012345"
+    assert reminders.whatsapp_number("12345", None) is None
+
+
+def test_whatsapp_reminder_link_uses_db_values(logged_in, monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "_customer_row",
+        lambda db, shop, cid: {"id": cid, "name": "Ramesh", "phone": "9886054321", "whatsapp": None, "balance_paise": 84000},
+    )
+    monkeypatch.setattr(main, "_one", lambda db, sql, values: {"shop_name": "Sri Lakshmi Kirana Stores"})
+    soft = client.get(f"/customers/{CUSTOMER_ID}/whatsapp?language=hi").json()
+    assert soft["message"] == "Namaste Ramesh ji, Sri Lakshmi Kirana Stores mein aapka ₹840 baaki hai. Jab ho sake, de dijiye. Dhanyavaad!"
+    assert soft["url"].startswith("https://wa.me/919886054321?text=Namaste%20Ramesh")
+    firm = client.get(f"/customers/{CUSTOMER_ID}/whatsapp?tone=firm").json()
+    assert firm["message"] == "Ramesh, ₹840 is overdue at Sri Lakshmi Kirana Stores. Please clear it this week."
+
+
+def test_whatsapp_reminder_needs_a_number_and_a_due(logged_in, monkeypatch):
+    monkeypatch.setattr(main, "_customer_row", lambda db, shop, cid: {"id": cid, "name": "Kiran", "phone": None, "whatsapp": None, "balance_paise": 500})
+    assert client.get(f"/customers/{CUSTOMER_ID}/whatsapp").status_code == 422
+    monkeypatch.setattr(main, "_customer_row", lambda db, shop, cid: {"id": cid, "name": "Kiran", "phone": "9845012345", "whatsapp": None, "balance_paise": 0})
+    res = client.get(f"/customers/{CUSTOMER_ID}/whatsapp")
+    assert res.status_code == 422 and "Nothing is due" in res.json()["detail"]
