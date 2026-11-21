@@ -64,6 +64,11 @@ def test_placeholder_database_url_fails_closed_with_a_clear_message(monkeypatch)
         importlib.reload(database)
 
 
+def test_name_pasted_twice_is_reported(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "SUPABASE_URL=https://abcdefghijklmnop.supabase.co")
+    assert "SUPABASE_URL has its name pasted twice (SUPABASE_URL=SUPABASE_URL=...)" in main.config_problems()
+
+
 def test_real_looking_values_are_not_flagged(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://abcdefghijklmnop.supabase.co")
     monkeypatch.setenv("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_example")

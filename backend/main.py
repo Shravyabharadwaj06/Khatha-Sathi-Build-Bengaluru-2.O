@@ -70,6 +70,8 @@ def config_problems() -> list[str]:
             problems.append(f"{name} is empty")
         elif is_placeholder(value):
             problems.append(f"{name} still has the .env.example placeholder")
+        elif value.startswith(f"{name}="):
+            problems.append(f"{name} has its name pasted twice ({name}={name}=...)")
     if os.environ.get("OTP_MODE", "").strip().lower() == "dev" and not re.fullmatch(
         r"\d{6}", os.environ.get("DEV_OTP_CODE", "").strip()
     ):

@@ -24,7 +24,10 @@ elif DATABASE_URL:
     try:
         parsed_url = make_url(DATABASE_URL)
     except ArgumentError:
-        DATABASE_CONFIG_ERROR = "DATABASE_URL is not a valid SQLAlchemy URL."
+        DATABASE_CONFIG_ERROR = (
+            "DATABASE_URL is not a valid URL"
+            + (" (the line reads DATABASE_URL=DATABASE_URL=...)." if DATABASE_URL.startswith("DATABASE_URL=") else ".")
+        )
     else:
         if parsed_url.drivername != "postgresql+psycopg":
             DATABASE_CONFIG_ERROR = "DATABASE_URL must use the Supabase PostgreSQL psycopg driver."

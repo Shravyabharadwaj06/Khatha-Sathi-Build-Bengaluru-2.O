@@ -20,6 +20,9 @@ TEXT = {
     "nothing_to_undo": {"hi": "Wapas karne ke liye kuch nahi hai.", "kn": "Vaapas maadalu enu illa.", "en": "There is nothing to undo."},
     "reminder_ready": {"hi": "Reminder taiyaar hai. WhatsApp kholkar bhejiye.", "kn": "Reminder ready ide. WhatsApp open maadi kalisi.", "en": "Reminder is ready. Open WhatsApp to send it."},
     "no_amount": {"hi": "Kitne rupaye mile? Raqam boliye.", "kn": "Eshtu rupaayi? Mottavannu heli.", "en": "How much was paid? Please say the amount."},
+    "udhaar_needs_items": {"hi": "Udhaar bill ke saath likha jaata hai. Saaman boliye, jaise: Ramesh ko 2 Tata Salt udhaar.",
+                           "kn": "Saala bill jothe barediduttade. Vastu heli, udaharane: Ramesh ge 2 Tata Salt saala.",
+                           "en": "Udhaar is recorded as a bill. Say what was bought, e.g. 'Ramesh ko 2 Tata Salt udhaar'."},
     "no_price": {"hi": "Is saaman ka daam set nahi hai.", "kn": "Ee vastuvina bele set aagilla.", "en": "This item has no price set yet."},
     "saved": {"hi": "Save ho gaya.", "kn": "Save aaytu.", "en": "Saved."},
 }

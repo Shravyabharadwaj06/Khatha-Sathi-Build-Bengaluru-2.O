@@ -205,6 +205,10 @@ class VoiceService:
                 return self._bill_draft(None, data, products, tr, language)
             return self._with_customer(p.names[0], customers, tr, language, "CREATE_BILL", data)
 
+        if parser.is_udhaar_without_items(tr):
+            # Udhaar is recorded as a bill on credit, so it needs the items (balances change only via bills/payments).
+            return error_response(tr, language, "CREATE_BILL", "NOT_UNDERSTOOD", T.t("udhaar_needs_items", language),
+                                  "Udhaar needs the items that were bought.")
         return error_response(tr, language, "UNKNOWN", "NOT_UNDERSTOOD", T.t("not_understood", language),
                               "Could not understand the request.")
 

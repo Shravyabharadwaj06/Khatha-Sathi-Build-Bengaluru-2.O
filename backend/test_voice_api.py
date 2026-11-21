@@ -447,3 +447,11 @@ def test_postgres_store_confirm_commits_once():
     )
     assert result["entry_id"] == "entry-1" and calls == [("sale", "voice", "Ravi ge 2 milk")]
     assert session.commits == 1 and session.rollbacks == 0
+
+
+def test_udhaar_without_items_gets_a_hint_not_a_payment_draft(shop):
+    r = say("Ramesh ko 500 rupaye udhaar diya")
+    assert r["status"] == "error" and r["intent"] != "RECORD_PAYMENT"
+    assert r["error"]["message"] == "Udhaar needs the items that were bought."
+    assert "Tata Salt" in str(r)  # the spoken hint gives an example with items
+    assert r.get("draft") in (None, {})

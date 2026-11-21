@@ -243,6 +243,10 @@ HISTORY_RE = r"history|itihas|timeline|purana|entries|record"
 BALANCE_RE = r"baaki|baki|bakki|balance|kitna|eshtu|\bdue\b|outstanding"
 PAYMENT_RE = r"\bdiye\b|\bdiya\b|\bpaid\b|\bpay\b|kotta|kottru|kottidare|kottidru|jama|payment|\bmila\b|received"
 ADD_PRODUCT_RE = r"^(add|naya product|new product|hosa product|product add)\b"
+# Credit GIVEN to the customer. "Ramesh ko 500 udhaar diya" uses the same verb (diya) as a payment
+# ("Ramesh ne 500 diye") but means the opposite, so udhaar wording must never become a payment.
+UDHAAR_RE = r"udhaar|udhar|khata|credit|saala"  # bill mode words
+UDHAAR_GIVEN_RE = r"udhaar|udhar|udhari|credit|saala"  # not "khata": "khata mein 200 jama" IS a payment
 
 
 def _bill_mode(text: str) -> Optional[str]:
@@ -250,9 +254,14 @@ def _bill_mode(text: str) -> Optional[str]:
         return "upi"
     if _has(text, r"\bcash\b|nagad|nakad"):
         return "cash"
-    if _has(text, r"udhaar|udhar|khata|credit|saala"):
+    if _has(text, UDHAAR_RE):
         return "udhaar"
     return None
+
+
+def is_udhaar_without_items(raw_text: str) -> bool:
+    """'Ramesh ko 500 rupaye udhaar diya': credit with an amount but no items (not a valid entry on its own)."""
+    return _has(normalise(raw_text), UDHAAR_GIVEN_RE)
 
 
 PRICE_RE = r"(?:rs|rupees?|rupaye|rupay)\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*(?:rs|rupees?|rupaye|rupay)"
@@ -291,7 +300,7 @@ def parse(raw_text: str, customers: list[CustomerRec], products: list[ProductRec
     for pattern, intent in ((REMINDER_RE, "SEND_REMINDER"), (EXPLAIN_RE, "EXPLAIN_BALANCE"), (HISTORY_RE, "SHOW_HISTORY"), (BALANCE_RE, "SHOW_BALANCE")):
         if _has(text, pattern):
             return Parsed(intent, transcript, names, tone=tone)
-    if _has(text, PAYMENT_RE):
+    if _has(text, PAYMENT_RE) and not _has(text, UDHAAR_GIVEN_RE):
         mode = "upi" if _has(text, r"\bupi\b|gpay|phonepe|paytm") else "cash"
         return Parsed("RECORD_PAYMENT", transcript, names, amount_paise=amount_paise(text), mode=mode)
     items = find_items(text, products, brands)

@@ -133,3 +133,23 @@ def test_detect_intent_without_shop_data():
     assert P.detect_intent("add product ragi") == "ADD_PRODUCT"
     assert P.detect_intent("3 sold") == "CREATE_BILL"
     assert P.detect_intent("hello") == "UNKNOWN"
+
+
+# "diya" with udhaar is credit GIVEN to the customer, the opposite of a payment ("X ne diye").
+@pytest.mark.parametrize("text", ["Ramesh ko 500 rupaye udhaar diya", "Ramesh ko 500 udhar diye", "Ramesh ge 500 saala kotta"])
+def test_udhaar_given_is_never_a_payment(text):
+    parsed = run(text)
+    assert parsed.intent != "RECORD_PAYMENT"
+    assert P.is_udhaar_without_items(text)
+
+
+def test_udhaar_with_items_and_diya_is_a_credit_bill():
+    parsed = run("Ramesh ko 2 Tata namak udhaar diya")
+    assert parsed.intent == "CREATE_BILL" and parsed.mode == "udhaar"
+    assert item_names(parsed) == [("Tata Salt 1kg", "2")]
+
+
+@pytest.mark.parametrize("text", ["Ramesh ne 200 rupaye diye", "Ramesh ne khata mein 200 jama kiye"])
+def test_real_payments_still_parse_as_payments(text):
+    parsed = run(text)
+    assert parsed.intent == "RECORD_PAYMENT" and parsed.amount_paise == 20000

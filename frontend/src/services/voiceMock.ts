@@ -154,6 +154,11 @@ const ASK: Record<Lang, string> = { hi: 'Confirm karein?', kn: 'Confirm maadla?'
 
 const T = {
   notUnderstood: { hi: 'Samajh nahi aaya. Phir se boliye?', kn: 'Arthavaagalilla. Innondu sala heli?', en: "Sorry, I didn't get that. Please say it again." },
+  udhaarNeedsItems: {
+    hi: 'Udhaar bill ke saath likha jaata hai. Saaman boliye, jaise: Ramesh ko 2 Tata Salt udhaar.',
+    kn: 'Saala bill jothe barediduttade. Vastu heli, udaharane: Ramesh ge 2 Tata Salt saala.',
+    en: "Udhaar is recorded as a bill. Say what was bought, e.g. 'Ramesh ko 2 Tata Salt udhaar'.",
+  },
   noCustomer: { hi: 'Kis customer ka? Naam boliye.', kn: 'Yaava customer? Hesaru heli.', en: 'Which customer? Please say the name.' },
   noDraft: { hi: 'Abhi koi bill khula nahi hai. Pehle bill boliye.', kn: 'Yaava bill open illa. Modalu bill heli.', en: 'There is no open bill. Say the bill first.' },
   nothingToUndo: { hi: 'Wapas karne ke liye kuch nahi hai.', kn: 'Vaapas maadalu enu illa.', en: 'There is nothing to undo.' },
@@ -520,8 +525,10 @@ function understand(rawText: string, language: VoiceLanguage, draftId?: string):
     return matches.length > 1 ? clarifyFor(transcript, language, intent, names[0].name, resolve) : resolve(matches[0]);
   }
 
-  // RECORD_PAYMENT: "Ramesh ne 200 diye", "Ravi paid 150 upi"
-  if (has(/\bdiye\b|\bdiya\b|\bpaid\b|kotta|kottidru|jama|payment|\bmila\b/)) {
+  // RECORD_PAYMENT: "Ramesh ne 200 diye", "Ravi paid 150 upi".
+  // Not "Ramesh ko 500 udhaar diya": that is credit GIVEN (same verb, opposite meaning), as in backend/voice/parser.py.
+  const udhaarGiven = has(/udhaar|udhar|udhari|credit|saala/);
+  if (has(/\bdiye\b|\bdiya\b|\bpaid\b|kotta|kottidru|jama|payment|\bmila\b/) && !udhaarGiven) {
     const amount = firstAmountPaise(text);
     if (!names.length) return errorResponse(transcript, language, 'RECORD_PAYMENT', 'CUSTOMER_NOT_FOUND', T.noCustomer);
     if (!amount) return errorResponse(transcript, language, 'RECORD_PAYMENT', 'NOT_UNDERSTOOD', T.notUnderstood);
@@ -593,6 +600,7 @@ function understand(rawText: string, language: VoiceLanguage, draftId?: string):
     return matches.length > 1 ? clarifyFor(transcript, language, 'CREATE_BILL', names[0].name, build) : build(matches[0]);
   }
 
+  if (udhaarGiven) return errorResponse(transcript, language, 'CREATE_BILL', 'NOT_UNDERSTOOD', T.udhaarNeedsItems);
   return errorResponse(transcript, language, 'UNKNOWN', 'NOT_UNDERSTOOD', T.notUnderstood);
 }
 
