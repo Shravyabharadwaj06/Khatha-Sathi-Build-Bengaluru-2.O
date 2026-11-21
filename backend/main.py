@@ -89,6 +89,10 @@ OTP_RESEND_SECONDS = 30  # matches the Sign up page's resend countdown
 OTP_SENDS_PER_HOUR = 5
 OTP_FAILED_VERIFY_LIMIT = 5
 OTP_FAILED_VERIFY_WINDOW = 10 * 60
+BALANCE_EDIT_REFUSED = (
+    "A customer's balance can only change through bills, payments or undo. "
+    "The opening balance can be entered only when the customer is added."
+)
 _otp_sends: dict[str, list[float]] = {}
 _otp_failures: dict[str, list[float]] = {}
 
@@ -1135,12 +1139,18 @@ def update_customer(
             assignments.append(f"{column} = :{key}")
             values[key] = convert(updates[key])
 
-    balance_delta = 0
-    if "outstanding_balance" in updates:
+    # A balance changes only through bills, payments, undo (reversal) or the opening balance
+    # entered once when the customer is created. Sending the current value back is fine.
+    if updates.get("outstanding_balance") not in (None, ""):
         target_balance = _paise(updates["outstanding_balance"], "outstanding_balance")
-        balance_delta = target_balance - int(existing["balance_paise"] or 0)
+        if target_balance != int(existing["balance_paise"] or 0):
+            raise HTTPException(
+                status_code=422,
+                detail=BALANCE_EDIT_REFUSED,
+                headers={"X-Error-Field": "outstanding_balance"},
+            )
 
-    if not assignments and balance_delta == 0:
+    if not assignments:
         return _customer_dict(existing)
 
     try:
@@ -1159,36 +1169,6 @@ def update_customer(
             if result.rowcount == 0:
                 db.rollback()
                 raise HTTPException(status_code=404, detail="Customer not found.")
-        if balance_delta:
-            reference = _one(
-                db,
-                """
-                select id from public.ledger_entries
-                 where shop_id = :shop_id and customer_id = :customer_id
-                 order by created_at desc, id desc limit 1
-                """,
-                {"shop_id": context.shop_id, "customer_id": identifier},
-            )
-            if reference is None:
-                _insert_balance_entry(
-                    db,
-                    shop_id=context.shop_id,
-                    customer_id=identifier,
-                    amount=balance_delta,
-                    entry_type="opening_balance",
-                    note="Opening customer balance",
-                )
-            else:
-                _insert_balance_entry(
-                    db,
-                    shop_id=context.shop_id,
-                    customer_id=identifier,
-                    amount=abs(balance_delta),
-                    entry_type="correction",
-                    reference_id=str(reference["id"]),
-                    delta=balance_delta,
-                    note="Customer balance correction",
-                )
         db.commit()
     except IntegrityError as error:
         db.rollback()

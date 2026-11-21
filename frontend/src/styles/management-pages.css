@@ -638,3 +638,24 @@ body.management-body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Balance rules: opening balance once on create, read-only afterwards. */
+.management-field small {
+  color: #464650;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.management-input[readonly] {
+  border-style: dashed;
+  background: var(--management-paper);
+  color: var(--management-ink);
+  font-weight: 700;
+  cursor: default;
+}
+
+.management-table .management-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

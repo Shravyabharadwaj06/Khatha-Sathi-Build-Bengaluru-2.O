@@ -92,3 +92,38 @@ def test_otp_blocks_after_5_wrong_codes(dev_otp):
     assert blocked.status_code == 429
     dev_otp.now += 601
     assert client.post("/auth/otp/verify", json={"phone": "9845000003", "otp": "123456"}).json() == {"verified": True}
+
+
+# --- balance edits are refused (problem 4) ----------------------------------------
+from main import AuthContext, current_auth_context
+from database import get_db
+
+DEMO = AuthContext(user_id="00000000-0000-4000-8000-0000000000aa", shop_id="00000000-0000-4000-8000-0000000000bb", email="t@x.in")
+CUSTOMER_ID = "00000000-0000-4000-8000-0000000000cc"
+
+
+@pytest.fixture
+def logged_in(monkeypatch):
+    main.app.dependency_overrides[current_auth_context] = lambda: DEMO
+    main.app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(
+        main,
+        "_customer_row",
+        lambda db, shop_id, cid: {"id": cid, "shop_id": shop_id, "name": "Ramesh", "phone": None, "whatsapp": None,
+                                  "credit_score": None, "locality": None, "balance_paise": 84000},
+    )
+    yield
+    main.app.dependency_overrides.clear()
+
+
+def test_changing_a_balance_is_refused(logged_in):
+    res = client.put(f"/customers/{CUSTOMER_ID}", json={"outstanding_balance": 500})
+    assert res.status_code == 422
+    assert "only change through bills, payments or undo" in res.json()["detail"]
+    assert res.headers["X-Error-Field"] == "outstanding_balance"
+
+
+def test_sending_the_same_balance_back_is_harmless(logged_in, monkeypatch):
+    monkeypatch.setattr(main, "_customer_dict", lambda row: {"id": row["id"], "outstanding_balance": 840.0})
+    res = client.put(f"/customers/{CUSTOMER_ID}", json={"outstanding_balance": "840.00"})
+    assert res.status_code == 200
