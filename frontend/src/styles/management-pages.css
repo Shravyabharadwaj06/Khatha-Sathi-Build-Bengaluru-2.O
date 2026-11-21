@@ -1,0 +1,640 @@
+body.management-body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #faf9f5;
+  color: #0f0f56;
+  font-family: 'Work Sans', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.management-page,
+.management-page * {
+  box-sizing: border-box;
+}
+
+.management-page {
+  --management-ink: #0f0f56;
+  --management-paper: #faf9f5;
+  --management-white: #fff;
+  --management-blue: #c2dce3;
+  --management-yellow: #edea43;
+  --management-peach: #fddba4;
+  --management-lavender: #dec3eb;
+  --management-line: rgba(15, 15, 86, 0.15);
+  min-height: 100vh;
+  color: var(--management-ink);
+  background: var(--management-paper);
+  font-family: 'Work Sans', Arial, sans-serif;
+}
+
+.management-page button,
+.management-page input {
+  font: inherit;
+}
+
+.management-page button,
+.management-page a,
+.management-page input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.management-page :focus-visible {
+  outline: 3px solid #55579d;
+  outline-offset: 3px;
+}
+
+.management-shell {
+  width: min(1220px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 22px 0 48px;
+}
+
+.management-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  margin-bottom: 26px;
+}
+
+.management-brand {
+  color: var(--management-ink);
+  font: 700 24px/1 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 0.025em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.management-brand span {
+  color: #777681;
+}
+
+.management-back {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px solid var(--management-line);
+  border-radius: 4px;
+  color: var(--management-ink);
+  background: var(--management-white);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.management-back:hover {
+  border-color: var(--management-ink);
+  background: rgba(194, 220, 227, 0.35);
+}
+
+.management-back .material-symbols-outlined {
+  font-size: 19px;
+}
+
+.management-intro {
+  margin-bottom: 24px;
+}
+
+.management-eyebrow {
+  margin: 0 0 7px;
+  color: #5b5b79;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.management-intro h1 {
+  margin: 0;
+  color: var(--management-ink);
+  font: 700 clamp(32px, 5vw, 46px)/1.04 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
+}
+
+.management-intro p:last-child {
+  max-width: 680px;
+  margin: 10px 0 0;
+  color: #464650;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.management-panel {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--management-line);
+  border-radius: 8px;
+  background: var(--management-white);
+  box-shadow: 0 2px 6px rgba(15, 15, 86, 0.035);
+}
+
+.management-panel + .management-panel {
+  margin-top: 20px;
+}
+
+.management-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 21px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(15, 15, 86, 0.11);
+}
+
+.management-panel-heading h2 {
+  margin: 0;
+  color: var(--management-ink);
+  font: 700 25px/1.1 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.management-panel-heading p {
+  margin: 6px 0 0;
+  color: #55556e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.management-count {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid rgba(15, 15, 86, 0.16);
+  border-radius: 4px;
+  background: rgba(194, 220, 227, 0.45);
+  color: var(--management-ink);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.management-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px 16px;
+}
+
+.management-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.management-field label {
+  color: var(--management-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.management-required {
+  color: #a51d20;
+}
+
+.management-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 15, 86, 0.3);
+  border-radius: 4px;
+  color: #1b1c1a;
+  background: var(--management-white);
+  font-size: 14px;
+  line-height: 1.4;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.management-input::placeholder {
+  color: #6a6a7a;
+  opacity: 1;
+}
+
+.management-input:focus {
+  border-color: var(--management-ink);
+  box-shadow: 0 0 0 3px rgba(194, 220, 227, 0.65);
+  outline: none;
+}
+
+.management-input:focus-visible {
+  outline: 2px solid #55579d;
+  outline-offset: 2px;
+}
+
+.management-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 21px;
+  padding-top: 17px;
+  border-top: 1px solid rgba(15, 15, 86, 0.1);
+}
+
+.management-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 17px;
+  border: 1px solid var(--management-ink);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.management-button:hover:not(:disabled) {
+  box-shadow: 2px 2px 0 var(--management-ink);
+  transform: translate(-1px, -1px);
+}
+
+.management-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.management-button-primary {
+  min-width: 150px;
+  color: var(--management-ink);
+  background: var(--management-yellow);
+}
+
+.management-button-primary:hover:not(:disabled) {
+  background: #e0dd32;
+}
+
+.management-button-secondary {
+  color: var(--management-ink);
+  background: var(--management-white);
+}
+
+.management-button-secondary:hover:not(:disabled) {
+  background: rgba(194, 220, 227, 0.35);
+}
+
+.management-notice {
+  margin: 16px 0 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(15, 15, 86, 0.17);
+  border-left: 4px solid var(--management-blue);
+  border-radius: 3px;
+  color: var(--management-ink);
+  background: #f2f7f8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.management-notice-error {
+  border-left-color: #a51d20;
+  background: #fff4f1;
+}
+
+.management-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  color: var(--management-ink);
+  font: 700 26px/1.1 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.management-section-title span {
+  color: #55556e;
+  font: 600 13px/1.4 'Work Sans', Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.management-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(15, 15, 86, 0.16);
+  border-radius: 5px;
+}
+
+.management-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.management-table-products {
+  min-width: 700px;
+}
+
+.management-table-customers {
+  min-width: 600px;
+}
+
+.management-table th {
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(15, 15, 86, 0.17);
+  color: var(--management-ink);
+  background: #f2f1ed;
+  font: 700 12px/1.35 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.management-table td {
+  padding: 14px;
+  border-bottom: 1px solid rgba(15, 15, 86, 0.1);
+  color: #29293d;
+  font-size: 13px;
+  line-height: 1.45;
+  vertical-align: middle;
+}
+
+.management-table tbody tr:nth-child(even) {
+  background: #fdfcf9;
+}
+
+.management-table tbody tr:hover {
+  background: rgba(194, 220, 227, 0.19);
+}
+
+.management-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.management-table td:first-child {
+  color: var(--management-ink);
+  font-weight: 700;
+}
+
+.management-table-empty {
+  padding: 24px !important;
+  color: #55556e !important;
+  text-align: center;
+}
+
+.management-stock-low {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 3px 6px;
+  border: 1px solid rgba(15, 15, 86, 0.16);
+  border-radius: 3px;
+  color: #452b00;
+  background: var(--management-peach);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.management-category {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid rgba(15, 15, 86, 0.13);
+  border-radius: 3px;
+  color: var(--management-ink);
+  background: rgba(222, 195, 235, 0.45);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.management-row-action {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid rgba(15, 15, 86, 0.3);
+  border-radius: 4px;
+  color: var(--management-ink);
+  background: var(--management-white);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.management-row-action:hover {
+  color: var(--management-white);
+  background: var(--management-ink);
+}
+
+.management-form-layout {
+  display: grid;
+  grid-template-columns: minmax(270px, 0.72fr) minmax(0, 1.4fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.management-form-layout .management-panel + .management-panel {
+  margin-top: 0;
+}
+
+.management-customer-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.management-customer-form .management-field:first-child,
+.management-customer-form .management-form-actions {
+  grid-column: 1 / -1;
+}
+
+.management-customer-form .management-form-actions {
+  margin-top: 0;
+}
+
+.management-panel-customer-list {
+  min-width: 0;
+}
+
+.management-panel-customer-list .management-panel-heading {
+  align-items: center;
+}
+
+.management-panel-customer-list .management-table th,
+.management-panel-customer-list .management-table td {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.management-price {
+  color: var(--management-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 1040px) {
+  .management-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .management-form-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .management-shell {
+    width: min(100% - 28px, 560px);
+    padding-top: 12px;
+  }
+
+  .management-topbar {
+    min-height: 48px;
+    margin-bottom: 22px;
+  }
+
+  .management-brand {
+    font-size: 21px;
+  }
+
+  .management-back {
+    min-height: 40px;
+    padding: 7px 10px;
+  }
+
+  .management-intro {
+    margin-bottom: 19px;
+  }
+
+  .management-intro h1 {
+    font-size: clamp(30px, 9vw, 40px);
+  }
+
+  .management-intro p:last-child {
+    font-size: 14px;
+  }
+
+  .management-panel {
+    padding: 17px;
+  }
+
+  .management-panel-heading {
+    margin-bottom: 17px;
+  }
+
+  .management-panel-heading h2 {
+    font-size: 22px;
+  }
+
+  .management-form-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .management-customer-form {
+    grid-template-columns: 1fr;
+  }
+
+  .management-customer-form .management-field:first-child,
+  .management-customer-form .management-form-actions {
+    grid-column: auto;
+  }
+
+  .management-form-actions {
+    align-items: stretch;
+  }
+
+  .management-form-actions .management-button {
+    flex: 1 1 145px;
+  }
+
+  .management-table-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .management-table,
+  .management-table tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  .management-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .management-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .management-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+    padding: 7px 12px;
+    border: 1px solid rgba(15, 15, 86, 0.16);
+    border-radius: 5px;
+    background: var(--management-white);
+  }
+
+  .management-table tbody tr:nth-child(even) {
+    background: #fdfcf9;
+  }
+
+  .management-table tbody tr:hover {
+    background: rgba(194, 220, 227, 0.19);
+  }
+
+  .management-table td,
+  .management-panel-customer-list .management-table td {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(15, 15, 86, 0.08);
+    overflow-wrap: anywhere;
+  }
+
+  .management-table td::before {
+    color: #5b5b79;
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .management-table td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .management-table td:last-child {
+    align-items: flex-start;
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+
+  .management-table-empty {
+    display: block !important;
+    grid-column: 1 / -1;
+    padding: 18px 0 !important;
+    text-align: center;
+  }
+
+  .management-table-empty::before {
+    content: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .management-page *,
+  .management-page *::before,
+  .management-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
