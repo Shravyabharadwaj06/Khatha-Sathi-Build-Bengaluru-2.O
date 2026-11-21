@@ -393,7 +393,13 @@ const realVoice = {
   usage: () => voiceJson<VoiceUsage>('/voice/usage'),
 };
 
-const voiceImpl = USE_MOCK_API ? voiceMock : realVoice;
+/**
+ * Voice can stay on the in-browser mock while the rest of the app uses the real backend.
+ * VITE_USE_MOCK_VOICE=false switches it to the backend's /voice/* endpoints (Gnani).
+ * With VITE_USE_MOCK_API=true everything is mocked, voice included.
+ */
+export const USE_MOCK_VOICE = USE_MOCK_API || import.meta.env.VITE_USE_MOCK_VOICE !== 'false';
+const voiceImpl = USE_MOCK_VOICE ? voiceMock : realVoice;
 
 /** Send a recorded clip or text. Returns a draft, a question (clarify), an answer or an error. Never saves. */
 export const voiceCommand = (input: VoiceCommandInput): Promise<VoiceResponse> => voiceImpl.command(input);
