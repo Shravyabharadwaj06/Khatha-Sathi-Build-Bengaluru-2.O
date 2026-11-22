@@ -1,11 +1,11 @@
-import { useState, useRef, type ChangeEvent } from 'react';
+import { useEffect, useState, useRef, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePageStyles } from '../hooks/usePageStyles';
 import { PROFILE_BODY_CLASS, PROFILE_CSS } from '../components/profilePage';
 import { useToast } from '../hooks/useToast';
 import { AuthToast } from '../components/AuthToast';
 import { getSession, updateSessionUser, clearSession } from '../services/session';
-import { updateProfile, logout } from '../services/api';
+import { getCurrentUser, updateProfile, logout, type User } from '../services/api';
 import shopOwnerDefaultImg from '../assets/shop-owner.jpg';
 import { LanguageSelector } from '../components/LanguageSelector';
 
@@ -37,7 +37,36 @@ interface ProfileState {
   paymentReminder: boolean;
 }
 
-const STORAGE_SETTINGS_KEY = 'chotu.profile.settings';
+/**
+ * Old browser-only copy of the settings. It was shared by every account on the browser, so one owner could see
+ * (and save over) another's details. The database is now the only source; the old copy is deleted on load.
+ */
+const LEGACY_SETTINGS_KEY = 'chotu.profile.settings';
+
+const DEFAULT_PRIMARY_LANGUAGE = 'Kannada (ಕನ್ನಡ) - Southern Dialect';
+const DEFAULT_SECONDARY_LANGUAGE = 'Hindi (हिन्दी) - Hinglish Hybrid';
+
+/** Form state from the account in the database. Missing shop details stay empty (no sample data). */
+function profileFromUser(user: User | undefined): ProfileState {
+  return {
+    shopName: user?.shopName ?? '',
+    ownerName: user?.name ?? '',
+    phone: user?.phone ?? '',
+    businessDomain: user?.businessDomain ?? '',
+    gstNumber: user?.gstNumber ?? '',
+    fssaiNumber: user?.fssaiNumber ?? '',
+    address: user?.address ?? '',
+    avatarUrl: user?.avatarUrl || shopOwnerDefaultImg,
+    primaryLanguage: user?.primaryLanguage || DEFAULT_PRIMARY_LANGUAGE,
+    secondaryLanguage: user?.secondaryLanguage || DEFAULT_SECONDARY_LANGUAGE,
+    spokenReplies: user?.spokenReplies ?? true,
+    voiceSpeed: user?.voiceSpeed ?? 'Normal',
+    voiceVolume: user?.voiceVolume ?? 80,
+    dailyLedgerPdf: user?.dailyLedgerPdf ?? true,
+    lowStockAlert: user?.lowStockAlert ?? true,
+    paymentReminder: user?.paymentReminder ?? true,
+  };
+}
 
 export default function Profile() {
   usePageStyles({
@@ -56,40 +85,35 @@ export default function Profile() {
   const [showLogoutBanner, setShowLogoutBanner] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Profile data initialized from session user or localStorage
-  const [formData, setFormData] = useState<ProfileState>(() => {
-    const saved = localStorage.getItem(STORAGE_SETTINGS_KEY);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return {
-      shopName: currentUser?.shopName || 'Lakshmi Provision & General Stores',
-      ownerName: currentUser?.name || 'Ramesh Kumar',
-      phone: currentUser?.phone || '98451 23456',
-      businessDomain: currentUser?.businessDomain || 'Kirana / Provision Store',
-      gstNumber: currentUser?.gstNumber || '29AAAAA0000A1Z5',
-      fssaiNumber: currentUser?.fssaiNumber || '11223344001928',
-      address:
-        currentUser?.address ||
-        'Shop #14, Main Bazaar Road, Near Old Bus Stand, Mandya, Karnataka - 571401',
-      avatarUrl: shopOwnerDefaultImg,
-      primaryLanguage: 'Kannada (ಕನ್ನಡ) - Southern Dialect',
-      secondaryLanguage: 'Hindi (हिन्दी) - Hinglish Hybrid',
-      spokenReplies: true,
-      voiceSpeed: 'Normal',
-      voiceVolume: 80,
-      dailyLedgerPdf: true,
-      lowStockAlert: true,
-      paymentReminder: true,
-    };
-  });
+  // Shown at once from the session (filled from the database at login), then refreshed from GET /auth/me.
+  const [formData, setFormData] = useState<ProfileState>(() => profileFromUser(currentUser));
 
   // Track initial copy to enable discard
   const initialDataRef = useRef<ProfileState>(formData);
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_SETTINGS_KEY);
+    } catch {
+      // storage blocked: nothing to clean up
+    }
+    let cancelled = false;
+    getCurrentUser()
+      .then((user) => {
+        if (cancelled) return;
+        const fresh = profileFromUser(user);
+        initialDataRef.current = fresh;
+        setFormData(fresh);
+      })
+      .catch(() => {
+        if (!cancelled) showToast('Could not load your saved settings. Showing the last known details.');
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Load once per visit; showToast is stable enough and must not re-trigger the request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hidden file input for custom avatar upload
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -191,18 +215,20 @@ export default function Profile() {
 
     setIsSaving(true);
     try {
-      await updateProfile(formData);
-      localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(formData));
+      // The backend saves to shops / profiles / user_settings (and the avatar to Storage) and returns the stored account.
+      const saved = await updateProfile(formData);
       updateSessionUser({
-        name: formData.ownerName,
-        phone: formData.phone.replace(/\D/g, '').slice(-10),
-        businessDomain: formData.businessDomain,
-        shopName: formData.shopName,
-        address: formData.address,
-        gstNumber: formData.gstNumber,
-        fssaiNumber: formData.fssaiNumber,
+        name: saved.name,
+        phone: saved.phone,
+        businessDomain: saved.businessDomain,
+        shopName: saved.shopName,
+        address: saved.address,
+        gstNumber: saved.gstNumber,
+        fssaiNumber: saved.fssaiNumber,
       });
-      initialDataRef.current = formData;
+      const stored = saved.primaryLanguage === undefined ? formData : profileFromUser(saved); // mock returns fewer fields
+      initialDataRef.current = stored;
+      setFormData(stored);
       showToast('Settings saved successfully!');
     } catch {
       showToast('Failed to save settings. Please try again.');

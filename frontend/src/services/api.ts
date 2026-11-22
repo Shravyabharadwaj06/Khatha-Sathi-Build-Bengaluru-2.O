@@ -31,6 +31,16 @@ export interface User {
   gstNumber?: string;
   fssaiNumber?: string;
   address?: string;
+  /** The fields below come from the database (GET /auth/me); the mock backend leaves them out. */
+  avatarUrl?: string;
+  primaryLanguage?: string;
+  secondaryLanguage?: string;
+  spokenReplies?: boolean;
+  voiceSpeed?: 'Slow' | 'Normal' | 'Fast';
+  voiceVolume?: number;
+  dailyLedgerPdf?: boolean;
+  lowStockAlert?: boolean;
+  paymentReminder?: boolean;
 }
 
 export interface Session {
